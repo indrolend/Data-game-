@@ -1,7 +1,12 @@
 import * as THREE from "three";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 
+
+import * as THREE from "three";
+import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
+
 RectAreaLightUniformsLib.init();
+// ...existing code...
 
 // ========= DOM =========
 const canvas = document.getElementById("game-canvas");
