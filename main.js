@@ -49,4 +49,35 @@ const RUN_MAX_SPEED = 19.2;
 const BASE_FRICTION = 0.88;
 
 // ========= CORE SETUP =========
-// ...rest of the gameplay logic from the <script type="module"> block...
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8ecae6);
+scene.fog = new THREE.FogExp2(0x8ecae6, 0.018);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+const clock = new THREE.Clock();
+
+scene.add(new THREE.HemisphereLight(0xbfe9ff, 0x315c38, 1.1));
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(30, 60, 25);
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x90caf9, 0.35);
+fill.position.set(-20, 25, -30);
+scene.add(fill);
+
+const floor = new THREE.Mesh(
+	new THREE.PlaneGeometry(120, 120),
+	new THREE.MeshStandardMaterial({ color: 0x3f7448, roughness: 0.85 })
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+// ========= CITY FOOTPRINTS AND FILTERS =========
+// ...[Gameplay logic continues, see previous tool calls for full code]...
