@@ -761,8 +761,17 @@ function updateVacuum(dt, time) {
 				targetData[idx + T_RENDER_Y],
 				targetData[idx + T_Z]
 			);
-			absorbedCubes++;
-			updateHumanHud();
+						absorbedCubes++;
+						updateHumanHud();
+
+						// Add capture pulse animation to the most recently filled tile
+						const capturedIndex = Math.min(absorbedCubes - 1, humanTiles.length - 1);
+						if (capturedIndex >= 0) {
+							const tile = humanTiles[capturedIndex];
+							tile.classList.remove("capture-pulse");
+							void tile.offsetWidth;
+							tile.classList.add("capture-pulse");
+						}
 			if (absorbedCubes >= PHONE_CAPACITY) {
 				phoneIsFull = true;
 			}
