@@ -6,6 +6,7 @@ RectAreaLightUniformsLib.init();
 // ========= DOM =========
 const canvas = document.getElementById("game-canvas");
 const startOverlay = document.getElementById("start-overlay");
+const startButton = document.getElementById("start");
 const crosshair = document.getElementById("crosshair");
 
 // ========= CONSTANTS =========
