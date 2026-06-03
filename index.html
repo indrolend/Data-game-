@@ -998,106 +998,6 @@ body:not(.game-started) #crosshair {
 </style>
 
 
-<style id="battery-event-data-ui">
-#battery-events {
-  position: fixed;
-  left: 50%;
-  top: 72px;
-  transform: translateX(-50%);
-  z-index: 66;
-  width: 380px;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-}
-.battery-event {
-  font: 700 12px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-  color: #ffffff;
-  background: rgba(0,0,0,0.80);
-  border: 1px solid rgba(255,255,255,0.46);
-  padding: 3px 8px;
-  min-width: 150px;
-  text-align: center;
-  opacity: 0;
-  transform: translateY(-4px);
-  animation: battery-event-rise 1.05s ease-out forwards;
-  text-shadow: 0 1px 0 #000;
-  white-space: nowrap;
-}
-.battery-event.gain {
-  border-color: rgba(150,255,220,0.9);
-}
-.battery-event.cost {
-  border-color: rgba(255,120,90,0.9);
-}
-.battery-event.combo {
-  border-color: rgba(255,255,255,0.95);
-  min-width: 230px;
-}
-@keyframes battery-event-rise {
-  0% { opacity: 0; transform: translateY(-6px) scale(0.96); }
-  14% { opacity: 1; transform: translateY(0) scale(1.0); }
-  78% { opacity: 1; transform: translateY(10px) scale(1.0); }
-  100% { opacity: 0; transform: translateY(19px) scale(0.98); }
-}
-</style>
-
-
-<style id="battery-event-visibility-fix">
-#battery-events {
-  position: fixed !important;
-  left: 50% !important;
-  top: 86px !important;
-  transform: translateX(-50%) !important;
-  z-index: 999 !important;
-  width: 520px !important;
-  pointer-events: none !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  gap: 6px !important;
-}
-.battery-event {
-  font: 900 20px/1.05 -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif !important;
-  color: #fff !important;
-  background: rgba(0,0,0,0.92) !important;
-  border: 2px solid rgba(255,255,255,0.95) !important;
-  padding: 7px 12px !important;
-  min-width: 220px !important;
-  text-align: center !important;
-  opacity: 0;
-  transform: translateY(-8px) scale(0.94);
-  animation: battery-event-big-rise 1.75s ease-out forwards !important;
-  text-shadow: 0 0 10px rgba(255,255,255,0.65), 0 2px 0 #000 !important;
-  white-space: nowrap !important;
-}
-.battery-event.gain {
-  border-color: #90ffd8 !important;
-  color: #d8fff1 !important;
-}
-.battery-event.cost {
-  border-color: #ff7a5c !important;
-  color: #ffd4ca !important;
-}
-.battery-event.combo {
-  border-color: #ffffff !important;
-  color: #ffffff !important;
-  min-width: 320px !important;
-  font-size: 23px !important;
-  text-shadow: 0 0 16px rgba(255,160,40,0.95), 0 2px 0 #000 !important;
-}
-@keyframes battery-event-big-rise {
-  0% { opacity: 0; transform: translateY(-10px) scale(0.88); }
-  10% { opacity: 1; transform: translateY(0) scale(1.16); }
-  28% { opacity: 1; transform: translateY(3px) scale(1.0); }
-  78% { opacity: 1; transform: translateY(18px) scale(1.0); }
-  100% { opacity: 0; transform: translateY(34px) scale(0.96); }
-}
-</style>
-
-
 <style id="final-ui-authority-cleanup">
 /* Final HUD authority: facts persist; events expire themselves. */
 #room-hud {
@@ -1397,118 +1297,6 @@ body.game-started #start-overlay {
 }
 body:not(.game-started) #start-overlay {
   display: flex !important;
-}
-</style>
-
-
-<style id="energy-sources-strip-ui">
-/* Energy source strip: quiet active feed under the battery bar, no +/- arcade clutter. */
-#battery-events {
-  position: fixed !important;
-  left: 50% !important;
-  top: 72px !important;
-  transform: translateX(-50%) !important;
-  z-index: 73 !important;
-  width: 340px !important;
-  min-height: 16px !important;
-  pointer-events: none !important;
-  display: flex !important;
-  flex-direction: row !important;
-  justify-content: center !important;
-  align-items: center !important;
-  gap: 6px !important;
-  overflow: hidden !important;
-}
-.battery-event {
-  font: 700 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif !important;
-  color: rgba(255,255,255,0.86) !important;
-  background: rgba(0,0,0,0.62) !important;
-  border: 1px solid rgba(255,255,255,0.34) !important;
-  padding: 3px 6px !important;
-  min-width: 0 !important;
-  text-align: center !important;
-  opacity: 0.82 !important;
-  transform: none !important;
-  animation: energy-source-fade 2.2s linear forwards !important;
-  text-shadow: none !important;
-  white-space: nowrap !important;
-  letter-spacing: 0.02em !important;
-}
-.battery-event.gain {
-  border-color: rgba(150,255,220,0.50) !important;
-  color: rgba(205,255,238,0.92) !important;
-}
-.battery-event.cost {
-  border-color: rgba(255,120,90,0.50) !important;
-  color: rgba(255,210,200,0.90) !important;
-}
-.battery-event.combo {
-  border-color: rgba(255,255,255,0.68) !important;
-  color: rgba(255,255,255,0.96) !important;
-  min-width: 0 !important;
-  text-shadow: none !important;
-}
-@keyframes energy-source-fade {
-  0% { opacity: 0; }
-  10% { opacity: 0.92; }
-  72% { opacity: 0.78; }
-  100% { opacity: 0; }
-}
-</style>
-
-
-<style id="battery-symbol-impact-ui">
-#battery-events {
-  position: fixed !important;
-  left: 50% !important;
-  top: 72px !important;
-  transform: translateX(-50%) !important;
-  z-index: 73 !important;
-  width: 340px !important;
-  min-height: 18px !important;
-  pointer-events: none !important;
-  display: grid !important;
-  grid-template-columns: 1fr 1fr 1fr !important;
-  align-items: center !important;
-  gap: 6px !important;
-}
-.energy-symbol {
-  height: 18px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 4px !important;
-  font: 800 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif !important;
-  color: rgba(255,255,255,0.42) !important;
-  background: rgba(0,0,0,0.38) !important;
-  border: 1px solid rgba(255,255,255,0.18) !important;
-  opacity: 0.72 !important;
-  transition: opacity 0.12s linear, transform 0.12s ease-out, border-color 0.12s linear, color 0.12s linear !important;
-}
-.energy-symbol .mark {
-  font-size: 13px !important;
-}
-.energy-symbol .value {
-  min-width: 24px !important;
-  text-align: left !important;
-}
-.energy-symbol.plus.active {
-  color: #baffde !important;
-  border-color: rgba(150,255,220,0.86) !important;
-  opacity: 1 !important;
-  transform: scale(1.06) !important;
-}
-.energy-symbol.minus.active {
-  color: #ffc4b8 !important;
-  border-color: rgba(255,120,90,0.86) !important;
-  opacity: 1 !important;
-  transform: scale(1.06) !important;
-}
-.energy-symbol.mult.active {
-  color: #ffffff !important;
-  border-color: rgba(255,255,255,0.94) !important;
-  opacity: 1 !important;
-  transform: scale(1.06) !important;
 }
 </style>
 
@@ -2579,108 +2367,6 @@ floor.receiveShadow = true;
 floor.visible = false;
 scene.add(floor);
 
-const BUILDING_FOOTPRINTS = [];
-
-const CITY_SIZE = 96;
-const BLOCK_SIZE = 16;
-const ROAD_WIDTH = 4;
-const SIDEWALK_WIDTH = 1.2;
-const ROAD_CLEARANCE = ROAD_WIDTH / 2 + SIDEWALK_WIDTH + 0.4;
-
-function isOnStreetOrSidewalk(x, z) {
-	function distToNearestGridLine(v) {
-		const shifted = v + CITY_SIZE / 2;
-		const mod = ((shifted % BLOCK_SIZE) + BLOCK_SIZE) % BLOCK_SIZE;
-		return Math.min(mod, BLOCK_SIZE - mod);
-	}
-	return (
-		distToNearestGridLine(x) < ROAD_CLEARANCE ||
-		distToNearestGridLine(z) < ROAD_CLEARANCE
-	);
-}
-
-function isInsideBuilding(x, z) {
-	for (const b of BUILDING_FOOTPRINTS) {
-		if (
-			x > b.x - b.w / 2 &&
-			x < b.x + b.w / 2 &&
-			z > b.z - b.d / 2 &&
-			z < b.z + b.d / 2
-		) {
-			return true;
-		}
-	}
-	return false;
-}
-
-function canPlaceGrass(x, z) {
-	return !isOnStreetOrSidewalk(x, z) && !isInsideBuilding(x, z);
-}
-
-function createCityLayout() {
-	const roadMat = new THREE.MeshStandardMaterial({ color: 0x20242a, roughness: 0.9 });
-	const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x9a9a8f, roughness: 0.8 });
-	const smallMat = new THREE.MeshStandardMaterial({ color: 0x777f88, roughness: 0.7 });
-	const mediumMat = new THREE.MeshStandardMaterial({ color: 0x59636f, roughness: 0.75 });
-	const tallMat = new THREE.MeshStandardMaterial({ color: 0x3f4855, roughness: 0.8 });
-	const citySize = CITY_SIZE;
-	const blockSize = BLOCK_SIZE;
-	const roadWidth = ROAD_WIDTH;
-	const sidewalkWidth = SIDEWALK_WIDTH;
-	function addFlatRect(width, depth, x, z, mat, y = 0.012) {
-		const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, 0.025, depth), mat);
-		mesh.position.set(x, y, z);
-		mesh.receiveShadow = true;
-		scene.add(mesh);
-		return mesh;
-	}
-	for (let p = -citySize / 2; p <= citySize / 2; p += blockSize) {
-		addFlatRect(roadWidth, citySize, p, 0, roadMat);
-		addFlatRect(sidewalkWidth, citySize, p - roadWidth / 2 - sidewalkWidth / 2, 0, sidewalkMat, 0.018);
-		addFlatRect(sidewalkWidth, citySize, p + roadWidth / 2 + sidewalkWidth / 2, 0, sidewalkMat, 0.018);
-		addFlatRect(citySize, roadWidth, 0, p, roadMat);
-		addFlatRect(citySize, sidewalkWidth, 0, p - roadWidth / 2 - sidewalkWidth / 2, sidewalkMat, 0.018);
-		addFlatRect(citySize, sidewalkWidth, 0, p + roadWidth / 2 + sidewalkWidth / 2, sidewalkMat, 0.018);
-	}
-	for (let x = -citySize / 2 + blockSize / 2; x < citySize / 2; x += blockSize) {
-		for (let z = -citySize / 2 + blockSize / 2; z < citySize / 2; z += blockSize) {
-			if (Math.abs(x) < 10 && Math.abs(z) < 10) continue;
-			const r = Math.random();
-			let w, d, h, mat;
-			if (r < 0.45) {
-				w = 4 + Math.random() * 2;
-				d = 4 + Math.random() * 2;
-				h = 2 + Math.random() * 2;
-				mat = smallMat;
-			} else if (r < 0.82) {
-				w = 5 + Math.random() * 3;
-				d = 5 + Math.random() * 3;
-				h = 5 + Math.random() * 4;
-				mat = mediumMat;
-			} else {
-				w = 5 + Math.random() * 3;
-				d = 5 + Math.random() * 3;
-				h = 10 + Math.random() * 8;
-				mat = tallMat;
-			}
-			const jitterX = (Math.random() - 0.5) * 3;
-			const jitterZ = (Math.random() - 0.5) * 3;
-			const building = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-			building.position.set(x + jitterX, h / 2, z + jitterZ);
-			building.castShadow = true;
-			building.receiveShadow = true;
-			scene.add(building);
-			BUILDING_FOOTPRINTS.push({
-				x: x + jitterX,
-				z: z + jitterZ,
-				w: w + 1.0,
-				d: d + 1.0
-			});
-		}
-	}
-}
-
-// createCityLayout(); // disabled: current setting is closed laboratory rooms
 
 const PHONE_HEIGHT = 0.16;
 const LAB_FLOOR_TOP_Y = 0;
@@ -2769,7 +2455,6 @@ const HUMAN_RESPAWN_MIN_PLAYER_DIST = 8.0;
 const HUMAN_RESPAWN_MIN_OLD_SOUL_DIST = 6.0;
 const phoneStorage = {
 	storedCubes: [],
-	cubeProjectiles: [],
 	isFull: false,
 	lastCapturePulseTime: -9999,
 	lastDischargePulseTime: -9999
@@ -3343,23 +3028,12 @@ mirrorRenderTarget.texture.magFilter = THREE.LinearFilter;
 const mirrorCamera = new THREE.PerspectiveCamera(70, 1, 0.1, 120);
 const mirrorPlaneNormal = new THREE.Vector3(0, 0, 1);
 const mirrorCameraOffset = new THREE.Vector3();
-const portalPreviewScene = new THREE.Scene();
-portalPreviewScene.background = new THREE.Color(0x020406);
-portalPreviewScene.fog = new THREE.Fog(0x020406, 14, 38);
-const portalPreviewGroup = new THREE.Group();
-portalPreviewScene.add(portalPreviewGroup);
-const portalPreviewAmbient = new THREE.HemisphereLight(0xd9f3ff, 0x182028, 2.15);
-portalPreviewScene.add(portalPreviewAmbient);
-const portalPreviewLight = new THREE.PointLight(0xbdf4ff, 6.2, 52);
-portalPreviewLight.position.set(0, 4.8, 4.0);
-portalPreviewScene.add(portalPreviewLight);
 
 function getRuntimeResourceSnapshot() {
 	return {
 		geometries: renderer.info && renderer.info.memory ? renderer.info.memory.geometries : 0,
 		textures: renderer.info && renderer.info.memory ? renderer.info.memory.textures : 0,
 		roomChildren: roomGroup ? roomGroup.children.length : 0,
-		portalPreviewChildren: portalPreviewGroup ? portalPreviewGroup.children.length : 0,
 		storedSouls: phoneStorage ? phoneStorage.storedCubes.length : 0,
 		pendingShots: pendingDischargedSouls ? pendingDischargedSouls.length : 0,
 		flowerPowerups: flowerPowerups ? flowerPowerups.length : 0,
@@ -3572,68 +3246,17 @@ function addRoomCollider(width, height, depth, x, y, z) {
 	});
 }
 
-function clearPortalPreviewEnvironment() {
-	clearThreeGroup(portalPreviewGroup);
-}
 
-function addPortalPreviewBox(width, height, depth, x, y, z, material) {
-	const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
-	mesh.position.set(x, y, z);
-	portalPreviewGroup.add(mesh);
-	return mesh;
-}
-
-function rebuildPortalPreviewEnvironment() {
-	clearPortalPreviewEnvironment();
-	const nextHue = seededRoomValue(700 + room.index * 19);
-	const floorMat = new THREE.MeshStandardMaterial({ color: 0x9fa9ad, roughness: 0.72, metalness: 0.09 });
-	const wallMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.56 + nextHue * 0.04, 0.08, 0.44), roughness: 0.78, metalness: 0.08 });
-	const glassMat = new THREE.MeshStandardMaterial({ color: 0x0d1519, emissive: 0x071419, emissiveIntensity: 0.25, roughness: 0.35, metalness: 0.28 });
-	const glowMat = new THREE.MeshStandardMaterial({ color: 0xc8fbff, emissive: 0x5cecff, emissiveIntensity: 1.25, roughness: 0.36, metalness: 0.02 });
-	const darkMat = new THREE.MeshStandardMaterial({ color: 0x12191e, roughness: 0.88, metalness: 0.08 });
-	const lineMat = new THREE.MeshBasicMaterial({ color: 0xcaf8ff, transparent: true, opacity: 0.42 });
-	const silhouetteMat = new THREE.MeshStandardMaterial({ color: 0x050708, emissive: 0x001016, emissiveIntensity: 0.2, roughness: 0.9, metalness: 0.0 });
-	const w = 15.5;
-	const d = 27;
-	const h = 6.2;
-	addPortalPreviewBox(w, 0.08, d, 0, -0.04, -9.5, floorMat);
-	addPortalPreviewBox(w, 0.12, d, 0, h, -9.5, wallMat);
-	addPortalPreviewBox(w, h, 0.28, 0, h / 2, -23, wallMat);
-	addPortalPreviewBox(0.28, h, d, -w / 2, h / 2, -9.5, wallMat);
-	addPortalPreviewBox(0.28, h, d, w / 2, h / 2, -9.5, wallMat);
-	addPortalPreviewBox(5.2, 3.45, 0.16, 0, 1.85, 4.4, glassMat);
-	addPortalPreviewBox(4.3, 2.65, 0.08, 0, 1.85, 4.54, darkMat.clone());
-	for (let z = -21; z <= 1; z += 3.0) {
-		addPortalPreviewBox(w - 1.0, 0.018, 0.035, 0, 0.025, z, lineMat.clone());
-		addPortalPreviewBox(0.035, 0.018, d - 2.0, -3.6, 0.035, -9.5, lineMat.clone());
-		addPortalPreviewBox(0.035, 0.018, d - 2.0, 3.6, 0.035, -9.5, lineMat.clone());
-	}
-	for (let i = 0; i < 5; i++) {
-		const x = -1.6 + i * 0.8;
-		const cube = addPortalPreviewBox(0.36, 0.36, 0.36, x, 3.08 + Math.sin(i) * 0.08, -21.75, glowMat.clone());
-		cube.rotation.set(i * 0.41, i * 0.73, i * 0.29);
-	}
-	for (let i = 0; i < 4; i++) {
-		const x = (seededRoomValue(1010 + i * 5) - 0.5) * 7.2;
-		const z = -8 - seededRoomValue(1040 + i * 7) * 11.5;
-		const body = addPortalPreviewBox(0.42, 1.05, 0.26, x, 0.62, z, silhouetteMat.clone());
-		const head = addPortalPreviewBox(0.34, 0.34, 0.34, x, 1.34, z, silhouetteMat.clone());
-		body.rotation.y = seededRoomValue(1060 + i) * Math.PI * 2;
-		head.rotation.y = body.rotation.y;
-	}
-	for (let i = 0; i < 7; i++) {
-		const x = (seededRoomValue(820 + i * 5) - 0.5) * 9.6;
-		const z = -4.5 - seededRoomValue(860 + i * 7) * 13.4;
-		const bw = 0.8 + seededRoomValue(900 + i) * 1.25;
-		const bd = 0.8 + seededRoomValue(940 + i) * 1.25;
-		const bh = 0.45 + seededRoomValue(980 + i) * 1.2;
-		addPortalPreviewBox(bw, bh, bd, x, bh / 2, z, darkMat.clone());
-	}
-}
-
+/* ── Portal door pipeline ──────────────────────────────────────────────────
+ *  updateRoomLoop detects z-crossing → startDoorTransition(mode)
+ *    updateDoorTransition(dt) lerps camera → finishDoorTransition()
+ *      mode='advance': enterNextRoomThroughPortal()  – room.index++, full rebuild
+ *      mode='loop':    loopPlayerThroughClosedDoor() – portal wrap, no room change
+ *  Mirror door: renderMirrorDoor() renders main scene via mirrorCamera into
+ *  mirrorRenderTarget, which is applied as the door plane texture.
+ * ─────────────────────────────────────────────────────────────────────── */
 function buildRoomEnvironment() {
 	clearRoomEnvironment();
-	rebuildPortalPreviewEnvironment();
 	const hue = seededRoomValue(1);
 	const floorMat = new THREE.MeshStandardMaterial({ color: 0x9aa7ad, roughness: 0.86, metalness: 0.02 });
 	const wallMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.58 + hue * 0.03, 0.08, 0.60), roughness: 0.82, metalness: 0.04 });
@@ -4039,33 +3662,6 @@ function resetRoomTargets() {
 	}
 }
 
-function enterNextRoom() {
-	room.index++;
-	room.seed = Math.floor(Math.random() * 1000000) + room.index * 9973;
-	room.requiredSouls = ROOM_REQUIRED_SOULS;
-	room.depositedSouls = 0;
-	room.doorOpen = false;
-	room.depositCooldown = 0;
-	room.doorLoopCooldown = 0;
-	room.lastDoorCheckZ = ROOM_START_Z;
-	phoneStorage.storedCubes.length = 0;
-	pendingDischargedSouls.length = 0;
-	roomHumanRespawnQueue.length = 0;
-	shuffleCaptureSlotSounds();
-	syncStoredMirror();
-	updateStoredSoulDisplays();
-	player.pos.set(0, GROUND_Y, ROOM_START_Z);
-	player.vel.set(0, 0, 0);
-	player.jumpVel = 0;
-	player.grounded = true;
-	player.coyoteTimer = PARKOUR.coyoteTime;
-	player.jumpBufferTimer = 0;
-	buildRoomEnvironment();
-	resetRoomTargets();
-	gainBattery(18, "NEXT ROOM");
-	flashScreen();
-}
-
 
 function setDoorTransitionMaskActive(active) {
 	if (!doorTransitionMask) return;
@@ -4137,14 +3733,13 @@ function applyPortalBodyHandoff(targetRoomAdvanced = false) {
 	if (!targetRoomAdvanced) room.doorLoopCooldown = 0.30;
 }
 
-function enterNextRoomThroughPortal() {
-	room.index++;
-	room.seed = Math.floor(Math.random() * 1000000) + room.index * 9973;
+/* Shared room teardown/rebuild called by both enterNextRoomThroughPortal and resetRunState. */
+function resetRoomInventory(doorLoopCooldown = 0) {
 	room.requiredSouls = ROOM_REQUIRED_SOULS;
 	room.depositedSouls = 0;
 	room.doorOpen = false;
 	room.depositCooldown = 0;
-	room.doorLoopCooldown = 0.30;
+	room.doorLoopCooldown = doorLoopCooldown;
 	phoneStorage.storedCubes.length = 0;
 	pendingDischargedSouls.length = 0;
 	roomHumanRespawnQueue.length = 0;
@@ -4153,6 +3748,12 @@ function enterNextRoomThroughPortal() {
 	updateStoredSoulDisplays();
 	buildRoomEnvironment();
 	resetRoomTargets();
+}
+
+function enterNextRoomThroughPortal() {
+	room.index++;
+	room.seed = Math.floor(Math.random() * 1000000) + room.index * 9973;
+	resetRoomInventory(0.30);
 	applyPortalBodyHandoff(true);
 	gainBattery(18, "NEXT ROOM");
 }
@@ -4526,166 +4127,6 @@ function updateFlowerPowerups(dt) {
 	}
 }
 
-
-let grassMaterial = null;
-
-const shootOrigin = new THREE.Vector3();
-const shootDir = new THREE.Vector3();
-const shootState = {
-	impulseTime: -9999,
-	cursorJoinTime: -9999
-};
-
-function createGrass() {
-	const geometry = new THREE.BoxGeometry(0.08, 0.45, 0.035);
-	grassMaterial = new THREE.ShaderMaterial({
-		uniforms: {
-			uTime: { value: 0 },
-			uPlayerPos: { value: new THREE.Vector3() },
-			uColor: { value: new THREE.Color(0x4a7c59) },
-			uShootOrigin: { value: new THREE.Vector3() },
-			uShootDir: { value: new THREE.Vector3(0, 0, -1) },
-			uShootTime: { value: -9999 },
-			uVacuumPower: { value: 0 }
-		},
-		vertexShader: `
-			varying vec2 vUv;
-			uniform float uTime;
-			uniform vec3 uPlayerPos;
-			uniform vec3 uShootOrigin;
-			uniform vec3 uShootDir;
-			uniform float uShootTime;
-			uniform float uVacuumPower;
-			void main() {
-				vUv = uv;
-				vec4 worldPos = instanceMatrix * vec4(position, 1.0);
-				vec3 transformed = position;
-				float h = clamp(position.y / 0.45, 0.0, 1.0);
-				float windDist = distance(worldPos.xz, uPlayerPos.xz);
-				float windMask = 1.0 - smoothstep(4.0, 12.0, windDist);
-				float wind =
-					sin(uTime + worldPos.x * 0.65 + worldPos.z * 0.45) *
-					0.07 *
-					h *
-					windMask;
-				transformed.x += wind;
-				float dist = distance(worldPos.xz, uPlayerPos.xz);
-				float radius = 0.9;
-				if (dist < radius && position.y > 0.0) {
-					float power = 1.0 - dist / radius;
-					vec2 dir = normalize(worldPos.xz - uPlayerPos.xz);
-					transformed.x += dir.x * power * 0.3 * h;
-					transformed.z += dir.y * power * 0.3 * h;
-					transformed.y -= power * 0.08 * h;
-				}
-				// ===== RADIAL SHOOT IMPULSE WITH DECAY =====
-				float age = uTime - uShootTime;
-				if (age >= 0.0 && age < 1.4) {
-					vec2 toBlade = worldPos.xz - uShootOrigin.xz;
-					float distFromShot = length(toBlade);
-					vec2 radialDir = normalize(toBlade + vec2(0.0001, 0.0001));
-					float waveFront = age * 7.5;
-					float waveWidth = 0.85;
-					float ring = 1.0 - smoothstep(0.0, waveWidth, abs(distFromShot - waveFront));
-					float rangeFade = 1.0 - smoothstep(0.0, 7.5, distFromShot);
-					float decay = exp(-age * 2.4);
-					float wobble = sin(age * 18.0 - distFromShot * 2.0) * decay;
-					float blast = ring * rangeFade * decay * h;
-					float afterMotion = wobble * rangeFade * h * 0.22;
-					transformed.x += radialDir.x * (blast * 0.9 + afterMotion);
-					transformed.z += radialDir.y * (blast * 0.9 + afterMotion);
-					transformed.y -= blast * 0.14;
-				}
-				// ===== VACUUM INWARD PULL =====
-				if (uVacuumPower > 0.01) {
-					vec2 toVacuum = uShootOrigin.xz - worldPos.xz;
-					float vacuumDist = length(toVacuum);
-					vec2 pullDir = normalize(toVacuum + vec2(0.0001, 0.0001));
-					float pullMask = 1.0 - smoothstep(0.5, 8.0, vacuumDist);
-					float pulse = 0.75 + 0.25 * sin(uTime * 18.0 + vacuumDist * 3.0);
-					float pull = pullMask * pulse * uVacuumPower * h;
-					transformed.x += pullDir.x * pull * 0.45;
-					transformed.z += pullDir.y * pull * 0.45;
-					transformed.y -= pull * 0.1;
-				}
-				gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(transformed, 1.0);
-			}
-		`,
-		fragmentShader: `
-			varying vec2 vUv;
-			uniform vec3 uColor;
-			void main() {
-				float shade = 0.42 + vUv.y * 0.85;
-				gl_FragColor = vec4(uColor * shade, 1.0);
-			}
-		`
-	});
-	const grass = new THREE.InstancedMesh(geometry, grassMaterial, GRASS_COUNT);
-	const patchCount = 42;
-	const area = 70;
-	const patchCenters = [];
-	for (let p = 0; p < patchCount; p++) {
-		patchCenters.push({
-			x: (Math.random() - 0.5) * area,
-			z: (Math.random() - 0.5) * area,
-			radius: 1.4 + Math.random() * 3.2,
-			density: 0.45 + Math.random() * 0.75
-		});
-	}
-	for (let i = 0; i < GRASS_COUNT; i++) {
-		let x;
-		let z;
-		if (Math.random() < 0.82) {
-			const patch = patchCenters[Math.floor(Math.random() * patchCenters.length)];
-			const angle = Math.random() * Math.PI * 2;
-			const r = Math.sqrt(Math.random()) * patch.radius;
-			x = patch.x + Math.cos(angle) * r;
-			z = patch.z + Math.sin(angle) * r;
-		} else {
-			x = (Math.random() - 0.5) * area;
-			z = (Math.random() - 0.5) * area;
-		}
-		x += (Math.random() - 0.5) * 0.45;
-		z += (Math.random() - 0.5) * 0.45;
-		let attempts = 0;
-		while (!canPlaceGrass(x, z) && attempts < 20) {
-			if (Math.random() < 0.82) {
-				const patch = patchCenters[Math.floor(Math.random() * patchCenters.length)];
-				const angle = Math.random() * Math.PI * 2;
-				const r = Math.sqrt(Math.random()) * patch.radius;
-				x = patch.x + Math.cos(angle) * r;
-				z = patch.z + Math.sin(angle) * r;
-			} else {
-				x = (Math.random() - 0.5) * area;
-				z = (Math.random() - 0.5) * area;
-			}
-			x += (Math.random() - 0.5) * 0.45;
-			z += (Math.random() - 0.5) * 0.45;
-			attempts++;
-		}
-		if (!canPlaceGrass(x, z)) {
-			dummy.position.set(0, -999, 0);
-			dummy.scale.setScalar(0);
-			dummy.updateMatrix();
-			grass.setMatrixAt(i, dummy.matrix);
-			continue;
-		}
-		dummy.position.set(x, 0.225, z);
-		dummy.rotation.y = Math.random() * Math.PI;
-		const heightVariation = 0.5 + Math.random() * 1.25;
-		dummy.scale.set(
-			0.6 + Math.random() * 0.9,
-			heightVariation,
-			0.6 + Math.random() * 0.9
-		);
-		dummy.updateMatrix();
-		grass.setMatrixAt(i, dummy.matrix);
-	}
-	grass.instanceMatrix.needsUpdate = true;
-	scene.add(grass);
-}
-
-// createGrass(); // disabled: cold laboratory room has no grass
 
 
 const targetGeometry = new THREE.BoxGeometry(0.72, 0.72, 0.72);
@@ -5989,21 +5430,6 @@ const particleMaterial = new THREE.MeshBasicMaterial({
 const particleMesh = new THREE.InstancedMesh(particleGeometry, particleMaterial, PARTICLE_COUNT);
 scene.add(particleMesh);
 
-const MAX_CUBE_PROJECTILES = PHONE_CAPACITY;
-const cubeProjectileGeometry = new THREE.BoxGeometry(0.42, 0.42, 0.42);
-const cubeProjectileMaterial = new THREE.MeshStandardMaterial({
-	color: 0xff8a75,
-	emissive: 0x2f0907,
-	emissiveIntensity: 0.08,
-	roughness: 0.82
-});
-const cubeProjectileMesh = new THREE.InstancedMesh(
-	cubeProjectileGeometry,
-	cubeProjectileMaterial,
-	MAX_CUBE_PROJECTILES
-);
-scene.add(cubeProjectileMesh);
-cubeProjectileMesh.visible = false;
 
 function chooseDischargedSoulSlot() {
 	for (let i = 0; i < TARGET_COUNT; i++) {
@@ -6123,69 +5549,6 @@ function processPendingDischargedSouls(dt) {
 	}
 }
 
-function updateCubeProjectiles(dt) {
-	for (let i = phoneStorage.cubeProjectiles.length - 1; i >= 0; i--) {
-		const projectile = phoneStorage.cubeProjectiles[i];
-
-		projectile.life -= dt;
-		projectile.vel.y -= 1.4 * dt;
-		projectile.pos.addScaledVector(projectile.vel, dt);
-
-		let hitTarget = -1;
-		for (let t = 0; t < TARGET_COUNT; t++) {
-			const idx = t * TARGET_STRIDE;
-			const dx = targetData[idx + T_X] - projectile.pos.x;
-			const dy = targetData[idx + T_RENDER_Y] - projectile.pos.y;
-			const dz = targetData[idx + T_Z] - projectile.pos.z;
-			const hitRadius = projectile.kind === 1 ? 1.1 : 0.75;
-
-			if (dx * dx + dy * dy + dz * dz < hitRadius * hitRadius) {
-				hitTarget = t;
-				break;
-			}
-		}
-
-		if (hitTarget !== -1) {
-			damageSoulShell(
-				hitTarget,
-				projectile.kind === 1 ? 1.8 : 0.9,
-				projectile.pos.x,
-				projectile.pos.y,
-				projectile.pos.z
-			);
-			phoneStorage.cubeProjectiles.splice(i, 1);
-			continue;
-		}
-
-		if (projectile.life <= 0 || projectile.pos.y < -2) {
-			phoneStorage.cubeProjectiles.splice(i, 1);
-		}
-	}
-
-	for (let i = 0; i < MAX_CUBE_PROJECTILES; i++) {
-		const projectile = phoneStorage.cubeProjectiles[i];
-
-		if (!projectile) {
-			dummy.position.set(0, -999, 0);
-			dummy.scale.setScalar(0);
-			dummy.updateMatrix();
-			cubeProjectileMesh.setMatrixAt(i, dummy.matrix);
-			continue;
-		}
-
-		dummy.position.copy(projectile.pos);
-		dummy.rotation.set(
-			frame.now * 0.006,
-			frame.now * 0.004,
-			frame.now * 0.005
-		);
-		dummy.scale.setScalar(projectile.kind === 1 ? 1.55 : 1.05);
-		dummy.updateMatrix();
-		cubeProjectileMesh.setMatrixAt(i, dummy.matrix);
-	}
-
-	cubeProjectileMesh.instanceMatrix.needsUpdate = true;
-}
 
 function spawnParticleBurst(x, y, z) {
 	for (let n = 0; n < 22; n++) {
@@ -6846,24 +6209,11 @@ function resetRunState() {
 	resetBatteryCombo();
 	room.index = 1;
 	room.seed = 12345;
-	room.requiredSouls = ROOM_REQUIRED_SOULS;
-	room.depositedSouls = 0;
-	room.doorOpen = false;
-	room.depositCooldown = 0;
-	room.doorLoopCooldown = 0;
 	room.lastDoorCheckZ = ROOM_START_Z;
-	phoneStorage.storedCubes.length = 0;
-	phoneStorage.cubeProjectiles.length = 0;
-	pendingDischargedSouls.length = 0;
-	roomHumanRespawnQueue.length = 0;
-	shuffleCaptureSlotSounds();
 	vacuum.active = false;
 	vacuum.power = 0;
 	setMode("vacuum");
-	syncStoredMirror();
-	updateStoredSoulDisplays();
-	buildRoomEnvironment();
-	resetRoomTargets();
+	resetRoomInventory(0);
 	updateRoomVisuals();
 	updateBatteryHud();
 }
@@ -7851,17 +7201,6 @@ function updateScreenFlash() {
 	}
 }
 
-function updateGrass() {
-	if (!grassMaterial) return;
-	const time = frame.time;
-	grassMaterial.uniforms.uTime.value = time * 0.002;
-	grassMaterial.uniforms.uPlayerPos.value.copy(player.pos);
-	grassMaterial.uniforms.uShootOrigin.value.copy(shootOrigin);
-	grassMaterial.uniforms.uShootDir.value.copy(shootDir);
-	grassMaterial.uniforms.uShootTime.value = shootState.impulseTime * 0.002;
-	grassMaterial.uniforms.uVacuumPower.value = vacuum.power;
-}
-
 const crosshairState = {
 	hasAimTarget: false,
 	vacuumSpin: 0
@@ -7910,10 +7249,6 @@ function updateMirrorDoorCamera() {
 	mirrorCamera.updateMatrixWorld(true);
 }
 
-function updatePortalPreviewMotion() {
-	// Retained for compatibility with older debug snapshots. The active door now renders
-	// the real room from a linked same-room camera instead of this fake preview scene.
-}
 
 function renderMirrorDoor() {
 	if (!roomMirrorPlane || !roomMirrorPlane.visible) return;
@@ -7968,12 +7303,9 @@ function updateFrame(time = 0) {
 	updateRoomLoop(dt);
 	updateCamera();
 	updateScreenFlash();
-	updateGrass();
 	updateTargets();
 	updateParticles(dt);
 	updateProximityAttackVisuals(dt);
-	// Old cube projectile path retired: fired souls now use targetData + soulDepositShot.
-	// updateCubeProjectiles(dt);
 	updateCrosshair();
 	applyCrosshairArmTransforms();
 	updateSoulWindowMotion();
