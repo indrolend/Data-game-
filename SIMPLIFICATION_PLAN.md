@@ -70,5 +70,5 @@
 - **UI grouping opportunities**: room HUD + goal slots + stored soul HUD updates are split across several functions with repeated callsites.
 - **Per-frame allocations**: many vectors already reused; one notable per-shot allocation remains (`screenPlaneCenter.clone()` in `spawnDischargedSoul`).
 - **Disposal coverage**: disposal helper handles geometries, materials (including arrays), and textures with preservation support for mirror render target.
-- **Large base64 assets**: embedded SFX base64 block is large; external audio files already exist and should stay authoritative for packaging clarity.
+- **Large base64 assets**: embedded SFX base64 block is large (multi‑KB inline payload in `index.html`); prioritize external `audio/` files as authoritative and avoid adding new inline media blobs.
 - **Portal reasonability pain points**: transition + mapping + mirror render are correct but spread across multiple sections; a small contract block would lower reasoning cost.
