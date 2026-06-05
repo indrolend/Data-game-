@@ -2294,7 +2294,7 @@ function particlesRuntimeEnabled() {
 }
 
 function portalWindowRuntimeEnabled() {
-	return false;
+	return !!graphicsSettings.portalWindow;
 }
 
 function applyPortalWindowMaterialContract(plane) {
@@ -3525,6 +3525,7 @@ const fixedPortal = {
 const portalMappedCameraPosition = new THREE.Vector3();
 const portalMappedPlayerPosition = new THREE.Vector3();
 const portalMappedVelocity = new THREE.Vector3();
+const portalCrossingCameraDelta = new THREE.Vector3();
 const portalVirtualEye = new THREE.Vector3();
 const portalVirtualLook = new THREE.Vector3();
 const portalVirtualAim = new THREE.Vector3();
@@ -4272,16 +4273,11 @@ function loopPlayerThroughClosedDoor(direction = "sourceToDestination") {
 	// normal follower and the door window remains visual-only.
 	mapSameRoomPortalCrossingPosition(player.pos, portalMappedPlayerPosition, direction);
 	mapSameRoomPortalVelocity(player.vel, portalMappedVelocity, direction);
+	portalCrossingCameraDelta.subVectors(portalMappedPlayerPosition, player.pos);
 	player.pos.copy(portalMappedPlayerPosition);
 	player.vel.copy(portalMappedVelocity);
 	player.jumpVel = player.vel.y || player.jumpVel;
-	// Keep the chase camera as a normal observer, but if it is already inside the
-	// doorway aperture, carry it through the same seam so the door behaves like a
-	// connected opening rather than a camera-blocked teleport.
-	if (cameraMode.current === CAMERA_MODE_THIRD && isInsideDoorAperture(camera.position, 0.72)) {
-		mapSameRoomPortalCrossingPosition(camera.position, portalMappedCameraPosition, direction);
-		camera.position.copy(portalMappedCameraPosition);
-	}
+	camera.position.add(portalCrossingCameraDelta);
 	room.lastDoorCheckZ = player.pos.z;
 	room.doorLoopCooldown = 0.035;
 	doorCrossingState.active = false;
@@ -4316,16 +4312,14 @@ function tryResolveDoorCrossing() {
 	const withinDoorAperture = withinDoorWidth && isInsideDoorAperture(player.pos, 0.04);
 	if (!withinDoorAperture) return false;
 	if (!room.doorOpen) {
-		if (player.pos.z <= fixedPortal.sourceZ) {
-			const delta = fixedPortal.destinationZ - fixedPortal.sourceZ;
-			player.pos.z += delta;
-			room.lastDoorCheckZ = player.pos.z;
+		const crossedSourcePlane = room.lastDoorCheckZ > fixedPortal.sourceZ && player.pos.z <= fixedPortal.sourceZ;
+		if (crossedSourcePlane) {
+			resolveDoorCrossingAction('loop', 'sourceToDestination');
 			return true;
 		}
-		if (player.pos.z >= fixedPortal.destinationZ) {
-			const delta = fixedPortal.destinationZ - fixedPortal.sourceZ;
-			player.pos.z -= delta;
-			room.lastDoorCheckZ = player.pos.z;
+		const crossedDestinationPlane = room.lastDoorCheckZ < fixedPortal.destinationZ && player.pos.z >= fixedPortal.destinationZ;
+		if (crossedDestinationPlane) {
+			resolveDoorCrossingAction('loop', 'destinationToSource');
 			return true;
 		}
 	} else {
@@ -8034,7 +8028,7 @@ function updateMirrorDoorCamera() {
 
 
 function renderMirrorDoor() {
-	return;
+	if (!roomMirrorPlane || !portalWindowRuntimeEnabled()) return;
 	updateMirrorDoorCamera();
 	const previousTarget = renderer.getRenderTarget();
 	const previousXrEnabled = renderer.xr.enabled;
