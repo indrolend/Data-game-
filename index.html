@@ -4313,9 +4313,15 @@ function tryResolveDoorCrossing() {
 	if (!withinDoorAperture) return false;
 	if (!room.doorOpen) {
 		const crossedSourcePlane = room.lastDoorCheckZ > fixedPortal.sourceZ && player.pos.z <= fixedPortal.sourceZ;
-		if (crossedSourcePlane) { resolveDoorCrossingAction('loop','sourceToDestination'); return true; }
+		if (crossedSourcePlane) {
+			resolveDoorCrossingAction('loop', 'sourceToDestination');
+			return true;
+		}
 		const crossedDestinationPlane = room.lastDoorCheckZ < fixedPortal.destinationZ && player.pos.z >= fixedPortal.destinationZ;
-		if (crossedDestinationPlane) { resolveDoorCrossingAction('loop','destinationToSource'); return true; }
+		if (crossedDestinationPlane) {
+			resolveDoorCrossingAction('loop', 'destinationToSource');
+			return true;
+		}
 	} else {
 		const crossedSourcePlane = room.lastDoorCheckZ > fixedPortal.sourceZ && player.pos.z <= fixedPortal.sourceZ;
 		if (crossedSourcePlane) { resolveDoorCrossingAction('advance','sourceToDestination'); return true; }
