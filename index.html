@@ -2911,6 +2911,7 @@ const activePowerupStacks = {
 const flowerPowerups = [];
 let flowerPowerupPrototype = null;
 const flowerPowerupPool = [];
+const flowerPowerupMirrorPool = [];
 const FLOWER_POWERUP_POOL_TARGET = 10;
 let flowerPowerupPoolWarmupQueued = false;
 const POWERUP_STOCK_BASE_MAX = 85;
@@ -3439,6 +3440,7 @@ const ROOM_WALL_HEIGHT = 7.2;
 const ROOM_EXIT_Z = -ROOM_DEPTH / 2 + 1.15;
 const ROOM_START_Z = ROOM_DEPTH / 2 - 5.5;
 const ROOM_GRID_Z = ROOM_EXIT_Z + 0.42;
+const ROOM_CONTINUATION_OFFSETS = [-ROOM_DEPTH, ROOM_DEPTH];
 const ROOM_GRID_RADIUS = 2.3;
 const ROOM_GOAL_Y = 3.05;
 const ROOM_DEPOSIT_HIT_RADIUS = 1.65;
@@ -3456,6 +3458,8 @@ let roomMirrorFrame = null;
 let roomEntranceMirrorPlane = null;
 let roomEntranceMirrorFrame = null;
 let roomFloorMesh = null;
+const roomContinuationGridCells = ROOM_CONTINUATION_OFFSETS.map(() => []);
+const roomContinuationGridSoulCubes = ROOM_CONTINUATION_OFFSETS.map(() => []);
 const mirrorRenderTarget = new THREE.WebGLRenderTarget(1024, 1024, { depthBuffer: true, stencilBuffer: false });
 mirrorRenderTarget.texture.colorSpace = THREE.SRGBColorSpace;
 mirrorRenderTarget.texture.generateMipmaps = false;
@@ -3654,6 +3658,10 @@ function clearRoomEnvironment() {
 	clearThreeGroup(roomGroup, { preservedTextures: new Set([mirrorRenderTarget.texture]) });
 	roomGridCells.length = 0;
 	roomGridSoulCubes.length = 0;
+	for (let i = 0; i < ROOM_CONTINUATION_OFFSETS.length; i++) {
+		roomContinuationGridCells[i].length = 0;
+		roomContinuationGridSoulCubes[i].length = 0;
+	}
 	roomColliders.length = 0;
 	roomDoorMesh = null;
 	roomMirrorPlane = null;
@@ -3725,9 +3733,9 @@ function buildRoomEnvironment() {
 	addRoomBox(0.5, ROOM_WALL_HEIGHT, ROOM_DEPTH, -ROOM_WIDTH / 2, ROOM_WALL_HEIGHT / 2, 0, wallMat);
 	addRoomBox(0.5, ROOM_WALL_HEIGHT, ROOM_DEPTH, ROOM_WIDTH / 2, ROOM_WALL_HEIGHT / 2, 0, wallMat);
 	// Wrapped-space visual contract: the door is an aperture into real repeated
-	// room geometry, not a picture, render texture, or blocker. These continuation
-	// shells are non-gameplay scenery: no colliders, no targets, no souls. They
-	// exist only so looking through a doorway has real depth/parallax.
+	// room geometry, not a picture, render texture, or blocker. This helper builds
+	// the continuation shell only; non-authoritative gameplay visuals are mirrored
+	// separately so the repeated rooms show the same visible state without owning it.
 	function addVisualContinuationShell(offsetZ) {
 		const copyFloor = addRoomBox(ROOM_WIDTH, 0.08, ROOM_DEPTH, 0, LAB_FLOOR_TOP_Y - 0.04, offsetZ, floorMat.clone());
 		copyFloor.castShadow = false;
@@ -3746,8 +3754,7 @@ function buildRoomEnvironment() {
 		addRoomBox(0.5, ROOM_WALL_HEIGHT, ROOM_DEPTH, -ROOM_WIDTH / 2, ROOM_WALL_HEIGHT / 2, offsetZ, copyWallMat);
 		addRoomBox(0.5, ROOM_WALL_HEIGHT, ROOM_DEPTH, ROOM_WIDTH / 2, ROOM_WALL_HEIGHT / 2, offsetZ, copyWallMat);
 	}
-	addVisualContinuationShell(-ROOM_DEPTH);
-	addVisualContinuationShell(ROOM_DEPTH);
+	for (const offsetZ of ROOM_CONTINUATION_OFFSETS) addVisualContinuationShell(offsetZ);
 	roomDoorMesh = null;
 	roomMirrorPlane = null;
 	roomMirrorFrame = null;
@@ -3777,6 +3784,28 @@ function buildRoomEnvironment() {
 		cube.receiveShadow = true;
 		roomGroup.add(cube);
 		roomGridSoulCubes.push(cube);
+		for (let c = 0; c < ROOM_CONTINUATION_OFFSETS.length; c++) {
+			const offsetZ = ROOM_CONTINUATION_OFFSETS[c];
+			const copyFrame = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.06), goalFrameMat.clone());
+			copyFrame.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z + offsetZ - 0.04);
+			copyFrame.castShadow = false;
+			copyFrame.receiveShadow = false;
+			roomGroup.add(copyFrame);
+
+			const copyHole = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.52, 0.08), goalHoleMat.clone());
+			copyHole.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z + offsetZ);
+			copyHole.castShadow = false;
+			copyHole.receiveShadow = false;
+			roomGroup.add(copyHole);
+
+			const copyCube = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), depositedSoulMat.clone());
+			copyCube.position.set(x, -999, ROOM_GRID_Z + offsetZ + 0.12);
+			copyCube.castShadow = false;
+			copyCube.receiveShadow = true;
+			roomGroup.add(copyCube);
+			roomContinuationGridCells[c].push({ rim: copyFrame, hole: copyHole, x, y: ROOM_GOAL_Y, z: ROOM_GRID_Z + offsetZ });
+			roomContinuationGridSoulCubes[c].push(copyCube);
+		}
 	}
 	const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x6f7d86, roughness: 0.74, metalness: 0.06 });
 	const obstacleCount = 8 + Math.min(room.index, 7);
@@ -3791,6 +3820,11 @@ function buildRoomEnvironment() {
 		const d = 1.0 + seededRoomValue(150 + i) * 1.7;
 		const h = 0.55 + seededRoomValue(90 + i) * 1.45;
 		addRoomBox(w, h, d, px, h / 2, pz, obstacleMat);
+		for (const offsetZ of ROOM_CONTINUATION_OFFSETS) {
+			const copy = addRoomBox(w, h, d, px, h / 2, pz + offsetZ, obstacleMat.clone());
+			copy.castShadow = false;
+			copy.receiveShadow = true;
+		}
 		addRoomCollider(w, h, d, px, h / 2, pz);
 	}
 	updateRoomVisuals();
@@ -3828,6 +3862,25 @@ function updateRoomVisuals() {
 			cube.position.set(cell.x, filled ? cell.y + pulse : -999, cell.z + 0.38);
 			cube.rotation.set(frame.now * 0.0015 + i, frame.now * 0.002 + i * 0.7, frame.now * 0.001);
 			cube.scale.setScalar(filled ? 1.0 : 0.01);
+		}
+	}
+	for (let c = 0; c < ROOM_CONTINUATION_OFFSETS.length; c++) {
+		for (let i = 0; i < roomContinuationGridCells[c].length; i++) {
+			const cell = roomContinuationGridCells[c][i];
+			const cube = roomContinuationGridSoulCubes[c][i];
+			const filled = i < room.depositedSouls;
+			const pulse = Math.sin(frame.now * 0.006 + i) * 0.025;
+			cell.hole.position.set(cell.x, cell.y, cell.z);
+			cell.hole.scale.setScalar(1);
+			cell.rim.rotation.set(0, 0, 0);
+			cell.rim.scale.setScalar(filled ? 1.05 + pulse : 1.0);
+			cell.rim.material.emissiveIntensity = filled ? 1.15 : 0.45;
+			if (cube) {
+				cube.visible = filled;
+				cube.position.set(cell.x, filled ? cell.y + pulse : -999, cell.z + 0.38);
+				cube.rotation.set(frame.now * 0.0015 + i, frame.now * 0.002 + i * 0.7, frame.now * 0.001);
+				cube.scale.setScalar(filled ? 1.0 : 0.01);
+			}
 		}
 	}
 	if (roomDoorMesh) {
@@ -4635,6 +4688,25 @@ function releaseFlowerPowerupMesh(mesh) {
 	if (!flowerPowerupPool.includes(mesh)) flowerPowerupPool.push(mesh);
 }
 
+function acquireFlowerPowerupMirrorMesh() {
+	if (flowerPowerupMirrorPool.length) {
+		const mesh = flowerPowerupMirrorPool.pop();
+		mesh.visible = true;
+		return mesh;
+	}
+	const mesh = createFlowerPowerupMesh();
+	scene.add(mesh);
+	mesh.visible = true;
+	return mesh;
+}
+
+function releaseFlowerPowerupMirrorMesh(mesh) {
+	if (!mesh) return;
+	resetFlowerPowerupMesh(mesh);
+	if (!mesh.parent) scene.add(mesh);
+	if (!flowerPowerupMirrorPool.includes(mesh)) flowerPowerupMirrorPool.push(mesh);
+}
+
 function isDropPositionClear(x, z, sourceX, sourceZ) {
 	const sourceDx = x - sourceX;
 	const sourceDz = z - sourceZ;
@@ -4670,13 +4742,17 @@ function spawnFlowerPowerup(x, y, z) {
 	mesh.position.set(drop.x, Math.max(FLOWER_POWERUP_GROUND_Y, y || FLOWER_POWERUP_GROUND_Y), drop.z);
 	mesh.rotation.y = Math.random() * Math.PI * 2;
 	mesh.visible = true;
-	flowerPowerups.push({ mesh, x: drop.x, y: mesh.position.y, z: drop.z, age: 0, value: FLOWER_PICKUP_VALUE, type: "flower" });
+	const continuationMeshes = ROOM_CONTINUATION_OFFSETS.map(() => acquireFlowerPowerupMirrorMesh());
+	flowerPowerups.push({ mesh, continuationMeshes, x: drop.x, y: mesh.position.y, z: drop.z, age: 0, value: FLOWER_PICKUP_VALUE, type: "flower" });
 	scheduleFlowerPowerupPoolWarmup();
 }
 
 function clearFlowerPowerups() {
 	for (const powerup of flowerPowerups) {
 		releaseFlowerPowerupMesh(powerup.mesh);
+		if (powerup.continuationMeshes) {
+			for (const mesh of powerup.continuationMeshes) releaseFlowerPowerupMirrorMesh(mesh);
+		}
 	}
 	flowerPowerups.length = 0;
 	scheduleFlowerPowerupPoolWarmup();
@@ -4690,6 +4766,15 @@ function updateFlowerPowerups(dt) {
 			powerup.mesh.position.y = powerup.y + Math.sin(powerup.age * 3.2) * FLOWER_BOB_HEIGHT;
 			powerup.mesh.rotation.y += dt * 1.35;
 		}
+		if (powerup.continuationMeshes) {
+			for (let c = 0; c < powerup.continuationMeshes.length; c++) {
+				const continuationMesh = powerup.continuationMeshes[c];
+				if (!continuationMesh) continue;
+				continuationMesh.visible = true;
+				continuationMesh.position.set(powerup.x, powerup.mesh ? powerup.mesh.position.y : powerup.y, powerup.z + ROOM_CONTINUATION_OFFSETS[c]);
+				continuationMesh.rotation.y = powerup.mesh ? powerup.mesh.rotation.y : continuationMesh.rotation.y;
+			}
+		}
 		const dx = powerup.x - player.pos.x;
 		const dz = powerup.z - player.pos.z;
 		const dy = (powerup.mesh ? powerup.mesh.position.y : powerup.y) - player.pos.y;
@@ -4697,6 +4782,9 @@ function updateFlowerPowerups(dt) {
 			addPowerupStack(powerup.type || "flower", powerup.value);
 			spawnParticleBurst(powerup.x, powerup.y + 0.2, powerup.z);
 			releaseFlowerPowerupMesh(powerup.mesh);
+			if (powerup.continuationMeshes) {
+				for (const mesh of powerup.continuationMeshes) releaseFlowerPowerupMirrorMesh(mesh);
+			}
 			flowerPowerups.splice(i, 1);
 			scheduleFlowerPowerupPoolWarmup();
 		}
@@ -4764,7 +4852,6 @@ humanArmMesh.visible = false;
 humanLegMesh.visible = false;
 scene.add(humanHeadMesh, humanTorsoMesh, humanArmMesh, humanLegMesh);
 
-const ROOM_CONTINUATION_OFFSETS = [-ROOM_DEPTH, ROOM_DEPTH];
 const CONTINUATION_INSTANCE_COUNT = TARGET_COUNT * ROOM_CONTINUATION_OFFSETS.length;
 const continuationTargetMesh = new THREE.InstancedMesh(targetGeometry, targetMaterial.clone(), CONTINUATION_INSTANCE_COUNT);
 continuationTargetMesh.castShadow = false;
@@ -8069,6 +8156,10 @@ function hideInstancedGameplayVisuals() {
 		humanLegMesh.setMatrixAt(i * 2, hidden);
 		humanLegMesh.setMatrixAt(i * 2 + 1, hidden);
 	}
+	for (let i = 0; i < CONTINUATION_INSTANCE_COUNT; i++) {
+		setHiddenContinuationInstance(continuationTargetMesh, i);
+		hideContinuationHumanMirror(i);
+	}
 	for (let i = 0; i < LATTICE_TOTAL_NODES; i++) latticeNodeMesh.setMatrixAt(i, hidden);
 	for (let i = 0; i < LATTICE_TOTAL_RODS; i++) latticeRodMesh.setMatrixAt(i, hidden);
 	targetMesh.instanceMatrix.needsUpdate = true;
@@ -8077,6 +8168,11 @@ function hideInstancedGameplayVisuals() {
 	humanTorsoMesh.instanceMatrix.needsUpdate = true;
 	humanArmMesh.instanceMatrix.needsUpdate = true;
 	humanLegMesh.instanceMatrix.needsUpdate = true;
+	continuationTargetMesh.instanceMatrix.needsUpdate = true;
+	continuationHumanHeadMesh.instanceMatrix.needsUpdate = true;
+	continuationHumanTorsoMesh.instanceMatrix.needsUpdate = true;
+	continuationHumanArmMesh.instanceMatrix.needsUpdate = true;
+	continuationHumanLegMesh.instanceMatrix.needsUpdate = true;
 	latticeNodeMesh.instanceMatrix.needsUpdate = true;
 	latticeRodMesh.instanceMatrix.needsUpdate = true;
 }
