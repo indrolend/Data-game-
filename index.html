@@ -4214,7 +4214,7 @@ function resolveDoorCrossingAction(mode, direction = "sourceToDestination") {
 	// handled separately by renderMirrorDoor().
 	captureDoorCrossingState(mode, direction);
 	if (mode === "advance") {
-		enterNextRoomThroughPortal();
+		enterNextRoomThroughPortal(direction);
 	} else {
 		loopPlayerThroughClosedDoor(direction);
 	}
@@ -4254,13 +4254,21 @@ function resetRoomInventory(doorLoopCooldown = 0) {
 	resetRoomTargets();
 }
 
-function enterNextRoomThroughPortal() {
+function enterNextRoomThroughPortal(direction = "sourceToDestination") {
+	// Open-door contract: advancing rooms should still feel like walking through the
+	// same doorway, so preserve seam-relative body state before rebuilding room data.
+	mapSameRoomPortalCrossingPosition(player.pos, portalMappedPlayerPosition, direction);
+	mapSameRoomPortalVelocity(player.vel, portalMappedVelocity, direction);
+	portalCrossingCameraDelta.subVectors(portalMappedPlayerPosition, player.pos);
 	room.index++;
 	room.seed = Math.floor(Math.random() * 1000000) + room.index * 9973;
-	placePlayerAtRoomStart();
 	resetRoomInventory(0.45);
-	placePlayerAtRoomStart();
+	player.pos.copy(portalMappedPlayerPosition);
+	player.vel.copy(portalMappedVelocity);
+	player.jumpVel = player.vel.y;
+	camera.position.add(portalCrossingCameraDelta);
 	room.lastDoorCheckZ = player.pos.z;
+	room.doorLoopCooldown = 0.035;
 	doorCrossingState.active = false;
 	portalCameraCompression.value = 0;
 	portalCameraCompression.target = 0;
@@ -4276,7 +4284,7 @@ function loopPlayerThroughClosedDoor(direction = "sourceToDestination") {
 	portalCrossingCameraDelta.subVectors(portalMappedPlayerPosition, player.pos);
 	player.pos.copy(portalMappedPlayerPosition);
 	player.vel.copy(portalMappedVelocity);
-	player.jumpVel = player.vel.y || player.jumpVel;
+	player.jumpVel = player.vel.y;
 	camera.position.add(portalCrossingCameraDelta);
 	room.lastDoorCheckZ = player.pos.z;
 	room.doorLoopCooldown = 0.035;
