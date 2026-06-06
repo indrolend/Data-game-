@@ -3538,6 +3538,10 @@ function getPlayerRoomTileOriginZ() {
 	return getRoomTileOriginZ(roomTopology.currentTileIndex);
 }
 
+function getContinuationTileOriginZ(tileOffset) {
+	return getRoomTileOriginZ(roomTopology.currentTileIndex + tileOffset);
+}
+
 function isInsideDoorAperture(position, pad = 0) {
 	return Math.abs(position.x - roomExitPos.x) <= fixedPortal.halfWidth + pad &&
 		position.y >= fixedPortal.bottomY - 0.12 &&
@@ -4213,6 +4217,17 @@ window.portalDoorDebug = function portalDoorDebug() {
 		tileIndex: getRoomTileIndex(player.pos.z)
 	};
 };
+window.roomTopologyDebug = function roomTopologyDebug() {
+	return {
+		playerWorldZ: player.pos.z,
+		localZ: wrapZ(player.pos.z),
+		previousTile: roomTopology.previousTileIndex,
+		currentTile: roomTopology.currentTileIndex,
+		roomIndex: room.index,
+		doorOpen: room.doorOpen,
+		mode: roomTopology.mode
+	};
+};
 
 function updateRoomTopology(previousPlayerZ = player.pos.z, currentPlayerZ = player.pos.z) {
 	const previousTile = getRoomTileIndex(previousPlayerZ);
@@ -4673,7 +4688,7 @@ function updateFlowerPowerups(dt) {
 				continuationMesh.position.set(
 					powerup.x,
 					powerup.mesh ? powerup.mesh.position.y : powerup.y,
-					powerup.z + getRoomTileOriginZ(roomTopology.currentTileIndex + ROOM_CONTINUATION_TILE_OFFSETS[c])
+					powerup.z + getContinuationTileOriginZ(ROOM_CONTINUATION_TILE_OFFSETS[c])
 				);
 				continuationMesh.rotation.y = powerup.mesh ? powerup.mesh.rotation.y : continuationMesh.rotation.y;
 			}
@@ -7524,10 +7539,10 @@ function updateTargets() {
 		// collision, capture, and damage remain owned by the canonical active room.
 		for (let c = 0; c < ROOM_CONTINUATION_TILE_OFFSETS.length; c++) {
 			const continuationInstance = i * ROOM_CONTINUATION_TILE_OFFSETS.length + c;
-			const continuationOffsetZ = ROOM_CONTINUATION_TILE_OFFSETS[c] * ROOM_DEPTH;
+			const continuationOriginZ = getContinuationTileOriginZ(ROOM_CONTINUATION_TILE_OFFSETS[c]);
 			if (cubeMorph > 0.001) {
 				continuationMatrix.copy(dummy.matrix);
-				continuationMatrix.elements[MATRIX_TRANSLATION_Z_INDEX] += continuationOffsetZ;
+				continuationMatrix.elements[MATRIX_TRANSLATION_Z_INDEX] = z + continuationOriginZ;
 				continuationTargetMesh.setMatrixAt(continuationInstance, continuationMatrix);
 			} else {
 				setHiddenContinuationInstance(continuationTargetMesh, continuationInstance);
@@ -7537,7 +7552,7 @@ function updateTargets() {
 				setContinuationHumanMirror(
 					continuationInstance,
 					x,
-					worldZ + continuationOffsetZ,
+					z + continuationOriginZ,
 					targetData[idx + T_WALK_YAW],
 					livingScale,
 					walkPhase
