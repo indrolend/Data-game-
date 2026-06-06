@@ -2293,17 +2293,12 @@ function particlesRuntimeEnabled() {
 	return !!graphicsSettings.particles;
 }
 
-function portalWindowRuntimeEnabled() {
-	return !!graphicsSettings.portalWindow;
-}
-
 function applyPortalWindowMaterialContract(plane) {
 	if (!plane || !plane.material) return;
-	const enabled = portalWindowRuntimeEnabled();
-	plane.material.map = enabled ? mirrorRenderTarget.texture : null;
-	plane.material.color.setHex(enabled ? 0xffffff : 0x0d1820);
+	plane.material.map = null;
+	plane.material.color.setHex(0x0d1820);
 	plane.material.transparent = true;
-	plane.material.opacity = enabled ? 1.0 : 0.42;
+	plane.material.opacity = 0.42;
 	plane.material.needsUpdate = true;
 }
 
@@ -3440,7 +3435,8 @@ const ROOM_WALL_HEIGHT = 7.2;
 const ROOM_EXIT_Z = -ROOM_DEPTH / 2 + 1.15;
 const ROOM_START_Z = ROOM_DEPTH / 2 - 5.5;
 const ROOM_GRID_Z = ROOM_EXIT_Z + 0.42;
-const ROOM_CONTINUATION_OFFSETS = [-ROOM_DEPTH, ROOM_DEPTH];
+const VISIBLE_ROOM_TILE_INDEX_OFFSETS = [-1, 0, 1];
+const ROOM_CONTINUATION_TILE_OFFSETS = [-1, 1];
 const ROOM_GRID_RADIUS = 2.3;
 const ROOM_GOAL_Y = 3.05;
 const ROOM_DEPOSIT_HIT_RADIUS = 1.65;
@@ -3449,6 +3445,12 @@ const ROOM_MIN_SPAWN_Z = -ROOM_DEPTH / 2 + 9;
 const ROOM_MAX_SPAWN_Z = ROOM_DEPTH / 2 - 7;
 const roomGroup = new THREE.Group();
 scene.add(roomGroup);
+const visibleRoomTileGroups = VISIBLE_ROOM_TILE_INDEX_OFFSETS.map(() => {
+	const group = new THREE.Group();
+	roomGroup.add(group);
+	return group;
+});
+const roomCenterTileGroup = visibleRoomTileGroups[VISIBLE_ROOM_TILE_INDEX_OFFSETS.indexOf(0)];
 const roomGridCells = [];
 const roomGridSoulCubes = [];
 const roomColliders = [];
@@ -3458,16 +3460,8 @@ let roomMirrorFrame = null;
 let roomEntranceMirrorPlane = null;
 let roomEntranceMirrorFrame = null;
 let roomFloorMesh = null;
-const roomContinuationGridCells = ROOM_CONTINUATION_OFFSETS.map(() => []);
-const roomContinuationGridSoulCubes = ROOM_CONTINUATION_OFFSETS.map(() => []);
-const mirrorRenderTarget = new THREE.WebGLRenderTarget(1024, 1024, { depthBuffer: true, stencilBuffer: false });
-mirrorRenderTarget.texture.colorSpace = THREE.SRGBColorSpace;
-mirrorRenderTarget.texture.generateMipmaps = false;
-mirrorRenderTarget.texture.minFilter = THREE.LinearFilter;
-mirrorRenderTarget.texture.magFilter = THREE.LinearFilter;
-const mirrorCamera = new THREE.PerspectiveCamera(70, 1, 0.1, 120);
-const mirrorPlaneNormal = new THREE.Vector3(0, 0, 1);
-const mirrorCameraOffset = new THREE.Vector3();
+const roomContinuationGridCells = ROOM_CONTINUATION_TILE_OFFSETS.map(() => []);
+const roomContinuationGridSoulCubes = ROOM_CONTINUATION_TILE_OFFSETS.map(() => []);
 
 function getRuntimeResourceSnapshot() {
 	return {
@@ -3491,20 +3485,14 @@ const room = {
 	doorOpen: false,
 	depositCooldown: 0
 };
+// roomTopology tracks wrapped room-space traversal. `currentTileIndex` and
+// `previousTileIndex` are the player's current and previous discrete tile
+// indices, while `mode` reports whether doorway crossings currently loop or
+// advance.
 const roomTopology = {
-	currentTileIndex: 0
-};
-
-const doorCrossingState = {
-	// Gameplay/topology state only. This is not a camera transition owner.
-	active: false,
-	mode: "loop",
-	direction: "sourceToDestination",
-	time: 0,
-	playerPosAtCross: new THREE.Vector3(),
-	playerVelAtCross: new THREE.Vector3(),
-	yawAtCross: 0,
-	pitchAtCross: 0
+	currentTileIndex: 0,
+	previousTileIndex: 0,
+	mode: "loop"
 };
 
 const fixedPortal = {
@@ -3523,27 +3511,6 @@ const fixedPortal = {
 	minCameraDistance: 0.16,
 	maxCameraDistance: ROOM_DEPTH - 5.0
 };
-const portalMappedCameraPosition = new THREE.Vector3();
-const portalVirtualEye = new THREE.Vector3();
-const portalVirtualLook = new THREE.Vector3();
-const portalVirtualAim = new THREE.Vector3();
-const portalCameraCompression = {
-	value: 0,
-	target: 0,
-	startDistance: 6.2,
-	fullDistance: 1.15,
-	max: 0.86
-};
-
-function getPortalCameraCompressionTarget() {
-	return 0;
-}
-
-function updatePortalCameraCompression() {
-	portalCameraCompression.target = 0;
-	portalCameraCompression.value = 0;
-	return 0;
-}
 
 function getRoomTileIndex(z) {
 	return Math.floor((z + ROOM_DEPTH * 0.5) / ROOM_DEPTH);
@@ -3568,25 +3535,11 @@ function getPlayerLocalZ() {
 }
 
 function getPlayerRoomTileOriginZ() {
-	return getRoomTileOriginZ(getRoomTileIndex(player.pos.z));
+	return getRoomTileOriginZ(roomTopology.currentTileIndex);
 }
 
-function mapSameRoomPortalPosition(sourcePosition, target = new THREE.Vector3()) {
-	// Portal-view mapping for a camera still inside the source side of the room.
-	// It answers: “where would this eye be if it were looking out from the
-	// room-start portal instead of standing in front of the exit portal?”
-	const tileIndex = getRoomTileIndex(sourcePosition.z);
-	const distanceFromDoorInside = THREE.MathUtils.clamp(
-		wrapZ(sourcePosition.z) - fixedPortal.sourceZ,
-		fixedPortal.minCameraDistance,
-		fixedPortal.maxCameraDistance
-	);
-	target.set(
-		THREE.MathUtils.clamp(sourcePosition.x, -ROOM_WIDTH * 0.43, ROOM_WIDTH * 0.43),
-		THREE.MathUtils.clamp(sourcePosition.y, GROUND_Y + 0.50, ROOM_WALL_HEIGHT - 0.20),
-		fixedPortal.destinationZ - distanceFromDoorInside + getRoomTileOriginZ(tileIndex)
-	);
-	return target;
+function getContinuationTileOriginZ(tileOffset) {
+	return getRoomTileOriginZ(roomTopology.currentTileIndex + tileOffset);
 }
 
 function isInsideDoorAperture(position, pad = 0) {
@@ -3607,7 +3560,7 @@ const roomDepositPos = new THREE.Vector3(0, ROOM_GOAL_Y, ROOM_GRID_Z);
 const roomExitPos = new THREE.Vector3(0, HUMAN_VISUAL_FOOT_Y, ROOM_EXIT_Z);
 const shotPrevPos = new THREE.Vector3();
 const shotCurrPos = new THREE.Vector3();
-const shotClosestPos = new THREE.Vector3();
+const roomLocalPositionTmp = new THREE.Vector3();
 
 function seededRoomValue(offset = 0) {
 	const x = Math.sin((room.seed + offset) * 12.9898) * 43758.5453;
@@ -3653,10 +3606,12 @@ function clearThreeGroup(group, options = {}) {
 }
 
 function clearRoomEnvironment() {
-	clearThreeGroup(roomGroup, { preservedTextures: new Set([mirrorRenderTarget.texture]) });
+	for (const tileGroup of visibleRoomTileGroups) {
+		clearThreeGroup(tileGroup);
+	}
 	roomGridCells.length = 0;
 	roomGridSoulCubes.length = 0;
-	for (let i = 0; i < ROOM_CONTINUATION_OFFSETS.length; i++) {
+	for (let i = 0; i < ROOM_CONTINUATION_TILE_OFFSETS.length; i++) {
 		roomContinuationGridCells[i].length = 0;
 		roomContinuationGridSoulCubes[i].length = 0;
 	}
@@ -3669,12 +3624,21 @@ function clearRoomEnvironment() {
 	roomFloorMesh = null;
 }
 
-function addRoomBox(width, height, depth, x, y, z, material) {
+function getVisibleRoomTileGroup(tileOffset = 0) {
+	const groupIndex = tileOffset + 1;
+	if (groupIndex < 0) throw new Error(`Negative room tile group index: ${tileOffset}`);
+	if (groupIndex >= visibleRoomTileGroups.length || VISIBLE_ROOM_TILE_INDEX_OFFSETS[groupIndex] !== tileOffset) {
+		throw new Error(`Invalid room tile group offset: ${tileOffset}`);
+	}
+	return visibleRoomTileGroups[groupIndex];
+}
+
+function addRoomBox(width, height, depth, x, y, z, material, parent = roomCenterTileGroup) {
 	const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
 	mesh.position.set(x, y, z);
 	mesh.castShadow = true;
 	mesh.receiveShadow = true;
-	roomGroup.add(mesh);
+	parent.add(mesh);
 	return mesh;
 }
 
@@ -3693,8 +3657,7 @@ function addRoomCollider(width, height, depth, x, y, z) {
 
 /* ── Same-room door topology pipeline ───────────────────────────────────────
  *  The doorway is only an opening. Gameplay owns the topology:
- *    locked source door crossing      → remap player to destination doorway
- *    locked destination door crossing → remap player back to source doorway
+ *    locked door crossing             → keep looping the same room tile
  *    open source door crossing        → advance to the next room
  *  There is no transition camera, no mask, and no room rebuild while locked.
  * ─────────────────────────────────────────────────────────────────────── */
@@ -3704,8 +3667,6 @@ function buildRoomEnvironment() {
 	const floorMat = new THREE.MeshStandardMaterial({ color: 0x9aa7ad, roughness: 0.86, metalness: 0.02 });
 	const wallMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.58 + hue * 0.03, 0.08, 0.60), roughness: 0.82, metalness: 0.04 });
 	const doorMat = new THREE.MeshStandardMaterial({ color: 0x010203, emissive: 0x000000, emissiveIntensity: 0.0, roughness: 0.88, transparent: true, opacity: 0.035, depthWrite: false });
-	const mirrorMat = new THREE.MeshBasicMaterial({ map: mirrorRenderTarget.texture, color: 0xffffff, side: THREE.DoubleSide });
-	const mirrorFrameMat = new THREE.MeshStandardMaterial({ color: 0xd8dde0, emissive: 0x101820, emissiveIntensity: 0.0, roughness: 0.18, metalness: 0.92 });
 	const goalFrameMat = new THREE.MeshStandardMaterial({ color: 0x8ff7ff, emissive: 0x2bdcff, emissiveIntensity: 0.65, roughness: 0.5, metalness: 0.04 });
 	const goalHoleMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
 	const depositedSoulMat = new THREE.MeshStandardMaterial({ color: 0x8ff7ff, emissive: 0x36d8ff, emissiveIntensity: 0.95, roughness: 0.42, metalness: 0.0 });
@@ -3734,25 +3695,26 @@ function buildRoomEnvironment() {
 	// room geometry, not a picture, render texture, or blocker. This helper builds
 	// the continuation shell only; non-authoritative gameplay visuals are mirrored
 	// separately so the repeated rooms show the same visible state without owning it.
-	function addVisualContinuationShell(offsetZ) {
-		const copyFloor = addRoomBox(ROOM_WIDTH, 0.08, ROOM_DEPTH, 0, LAB_FLOOR_TOP_Y - 0.04, offsetZ, floorMat.clone());
+	function addVisualContinuationShell(tileOffset) {
+		const tileGroup = getVisibleRoomTileGroup(tileOffset);
+		const copyFloor = addRoomBox(ROOM_WIDTH, 0.08, ROOM_DEPTH, 0, LAB_FLOOR_TOP_Y - 0.04, 0, floorMat.clone(), tileGroup);
 		copyFloor.castShadow = false;
 		copyFloor.receiveShadow = true;
-		const copyCeiling = addRoomBox(ROOM_WIDTH, 0.16, ROOM_DEPTH, 0, ROOM_WALL_HEIGHT + 0.08, offsetZ, wallMat.clone());
+		const copyCeiling = addRoomBox(ROOM_WIDTH, 0.16, ROOM_DEPTH, 0, ROOM_WALL_HEIGHT + 0.08, 0, wallMat.clone(), tileGroup);
 		copyCeiling.castShadow = false;
 		copyCeiling.receiveShadow = true;
 		const copyWallMat = wallMat.clone();
 		copyWallMat.color.multiplyScalar(0.96);
-		addRoomBox(sideWallWidth, ROOM_WALL_HEIGHT, 0.5, -sideWallX, ROOM_WALL_HEIGHT / 2, offsetZ + ROOM_DEPTH / 2, copyWallMat);
-		addRoomBox(sideWallWidth, ROOM_WALL_HEIGHT, 0.5, sideWallX, ROOM_WALL_HEIGHT / 2, offsetZ + ROOM_DEPTH / 2, copyWallMat);
-		addRoomBox(doorOpeningWidth, topWallHeight, 0.5, 0, topWallY, offsetZ + ROOM_DEPTH / 2, copyWallMat);
-		addRoomBox(sideWallWidth, ROOM_WALL_HEIGHT, 0.5, -sideWallX, ROOM_WALL_HEIGHT / 2, offsetZ - ROOM_DEPTH / 2, copyWallMat);
-		addRoomBox(sideWallWidth, ROOM_WALL_HEIGHT, 0.5, sideWallX, ROOM_WALL_HEIGHT / 2, offsetZ - ROOM_DEPTH / 2, copyWallMat);
-		addRoomBox(doorOpeningWidth, topWallHeight, 0.5, 0, topWallY, offsetZ - ROOM_DEPTH / 2, copyWallMat);
-		addRoomBox(0.5, ROOM_WALL_HEIGHT, ROOM_DEPTH, -ROOM_WIDTH / 2, ROOM_WALL_HEIGHT / 2, offsetZ, copyWallMat);
-		addRoomBox(0.5, ROOM_WALL_HEIGHT, ROOM_DEPTH, ROOM_WIDTH / 2, ROOM_WALL_HEIGHT / 2, offsetZ, copyWallMat);
+		addRoomBox(sideWallWidth, ROOM_WALL_HEIGHT, 0.5, -sideWallX, ROOM_WALL_HEIGHT / 2, ROOM_DEPTH / 2, copyWallMat, tileGroup);
+		addRoomBox(sideWallWidth, ROOM_WALL_HEIGHT, 0.5, sideWallX, ROOM_WALL_HEIGHT / 2, ROOM_DEPTH / 2, copyWallMat, tileGroup);
+		addRoomBox(doorOpeningWidth, topWallHeight, 0.5, 0, topWallY, ROOM_DEPTH / 2, copyWallMat, tileGroup);
+		addRoomBox(sideWallWidth, ROOM_WALL_HEIGHT, 0.5, -sideWallX, ROOM_WALL_HEIGHT / 2, -ROOM_DEPTH / 2, copyWallMat, tileGroup);
+		addRoomBox(sideWallWidth, ROOM_WALL_HEIGHT, 0.5, sideWallX, ROOM_WALL_HEIGHT / 2, -ROOM_DEPTH / 2, copyWallMat, tileGroup);
+		addRoomBox(doorOpeningWidth, topWallHeight, 0.5, 0, topWallY, -ROOM_DEPTH / 2, copyWallMat, tileGroup);
+		addRoomBox(0.5, ROOM_WALL_HEIGHT, ROOM_DEPTH, -ROOM_WIDTH / 2, ROOM_WALL_HEIGHT / 2, 0, copyWallMat, tileGroup);
+		addRoomBox(0.5, ROOM_WALL_HEIGHT, ROOM_DEPTH, ROOM_WIDTH / 2, ROOM_WALL_HEIGHT / 2, 0, copyWallMat, tileGroup);
 	}
-	for (const offsetZ of ROOM_CONTINUATION_OFFSETS) addVisualContinuationShell(offsetZ);
+	for (const tileOffset of ROOM_CONTINUATION_TILE_OFFSETS) addVisualContinuationShell(tileOffset);
 	roomDoorMesh = null;
 	roomMirrorPlane = null;
 	roomMirrorFrame = null;
@@ -3766,13 +3728,13 @@ function buildRoomEnvironment() {
 		frame.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z - 0.04);
 		frame.castShadow = false;
 		frame.receiveShadow = false;
-		roomGroup.add(frame);
+		roomCenterTileGroup.add(frame);
 
 		const hole = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.52, 0.08), goalHoleMat.clone());
 		hole.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z);
 		hole.castShadow = false;
 		hole.receiveShadow = false;
-		roomGroup.add(hole);
+		roomCenterTileGroup.add(hole);
 
 		roomGridCells.push({ rim: frame, hole, pole: null, backboard: null, x, y: ROOM_GOAL_Y, z: ROOM_GRID_Z });
 
@@ -3780,28 +3742,28 @@ function buildRoomEnvironment() {
 		cube.position.set(x, -999, ROOM_GRID_Z + 0.12);
 		cube.castShadow = true;
 		cube.receiveShadow = true;
-		roomGroup.add(cube);
+		roomCenterTileGroup.add(cube);
 		roomGridSoulCubes.push(cube);
-		for (let c = 0; c < ROOM_CONTINUATION_OFFSETS.length; c++) {
-			const offsetZ = ROOM_CONTINUATION_OFFSETS[c];
+		for (let c = 0; c < ROOM_CONTINUATION_TILE_OFFSETS.length; c++) {
+			const tileGroup = getVisibleRoomTileGroup(ROOM_CONTINUATION_TILE_OFFSETS[c]);
 			const copyFrame = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.06), goalFrameMat.clone());
-			copyFrame.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z + offsetZ - 0.04);
+			copyFrame.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z - 0.04);
 			copyFrame.castShadow = false;
 			copyFrame.receiveShadow = false;
-			roomGroup.add(copyFrame);
+			tileGroup.add(copyFrame);
 
 			const copyHole = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.52, 0.08), goalHoleMat.clone());
-			copyHole.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z + offsetZ);
+			copyHole.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z);
 			copyHole.castShadow = false;
 			copyHole.receiveShadow = false;
-			roomGroup.add(copyHole);
+			tileGroup.add(copyHole);
 
 			const copyCube = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), depositedSoulMat.clone());
-			copyCube.position.set(x, -999, ROOM_GRID_Z + offsetZ + 0.12);
+			copyCube.position.set(x, -999, ROOM_GRID_Z + 0.12);
 			copyCube.castShadow = false;
 			copyCube.receiveShadow = true;
-			roomGroup.add(copyCube);
-			roomContinuationGridCells[c].push({ rim: copyFrame, hole: copyHole, x, y: ROOM_GOAL_Y, z: ROOM_GRID_Z + offsetZ });
+			tileGroup.add(copyCube);
+			roomContinuationGridCells[c].push({ rim: copyFrame, hole: copyHole, x, y: ROOM_GOAL_Y, z: ROOM_GRID_Z });
 			roomContinuationGridSoulCubes[c].push(copyCube);
 		}
 	}
@@ -3818,8 +3780,8 @@ function buildRoomEnvironment() {
 		const d = 1.0 + seededRoomValue(150 + i) * 1.7;
 		const h = 0.55 + seededRoomValue(90 + i) * 1.45;
 		addRoomBox(w, h, d, px, h / 2, pz, obstacleMat);
-		for (const offsetZ of ROOM_CONTINUATION_OFFSETS) {
-			const copy = addRoomBox(w, h, d, px, h / 2, pz + offsetZ, obstacleMat.clone());
+		for (const tileOffset of ROOM_CONTINUATION_TILE_OFFSETS) {
+			const copy = addRoomBox(w, h, d, px, h / 2, pz, obstacleMat.clone(), getVisibleRoomTileGroup(tileOffset));
 			copy.castShadow = false;
 			copy.receiveShadow = true;
 		}
@@ -3843,8 +3805,15 @@ function renderGoalSlots() {
 	}
 }
 
+function updateVisibleRoomTilePositions() {
+	roomGroup.position.z = 0;
+	for (let i = 0; i < visibleRoomTileGroups.length; i++) {
+		visibleRoomTileGroups[i].position.z = getRoomTileOriginZ(roomTopology.currentTileIndex + VISIBLE_ROOM_TILE_INDEX_OFFSETS[i]);
+	}
+}
+
 function updateRoomVisuals() {
-	roomGroup.position.z = getRoomTileOriginZ(getRoomTileIndex(player.pos.z));
+	updateVisibleRoomTilePositions();
 	renderGoalSlots();
 	for (let i = 0; i < roomGridCells.length; i++) {
 		const cell = roomGridCells[i];
@@ -3863,7 +3832,7 @@ function updateRoomVisuals() {
 			cube.scale.setScalar(filled ? 1.0 : 0.01);
 		}
 	}
-	for (let c = 0; c < ROOM_CONTINUATION_OFFSETS.length; c++) {
+	for (let c = 0; c < ROOM_CONTINUATION_TILE_OFFSETS.length; c++) {
 		for (let i = 0; i < roomContinuationGridCells[c].length; i++) {
 			const cell = roomContinuationGridCells[c][i];
 			const cube = roomContinuationGridSoulCubes[c][i];
@@ -4202,40 +4171,6 @@ function setDoorCrossingMaskActive(active) {
 	doorCrossingMask.classList.toggle("active", false);
 }
 
-function captureDoorCrossingState(mode, direction = "sourceToDestination") {
-	doorCrossingState.mode = mode;
-	doorCrossingState.direction = direction;
-	doorCrossingState.time = 0;
-	doorCrossingState.playerPosAtCross.copy(player.pos);
-	doorCrossingState.playerVelAtCross.copy(player.vel);
-	doorCrossingState.yawAtCross = cursor.yaw;
-	doorCrossingState.pitchAtCross = cursor.pitch;
-}
-
-function resolveDoorCrossingAction(mode, direction = "sourceToDestination") {
-	// Door crossing dispatcher: gameplay/topology only. Portal-window rendering is
-	// handled separately by renderMirrorDoor().
-	captureDoorCrossingState(mode, direction);
-	if (mode === "advance") {
-		enterNextRoomThroughPortal(direction);
-	}
-	doorCrossingState.active = false;
-}
-
-function finishDoorCrossing() {
-	doorCrossingState.active = false;
-	setDoorCrossingMaskActive(false);
-}
-
-function updateDoorCrossingState(dt) {
-	// Kept as a safe no-op guard for older transition-style frame paths.
-	doorCrossingState.active = false;
-}
-
-function applyPortalBodyHandoff(targetRoomAdvanced = false) {
-	// Compatibility no-op: wrapped-space continuity no longer remaps player/camera.
-}
-
 /* Shared room teardown/rebuild called by both enterNextRoomThroughPortal and resetRunState. */
 function resetRoomInventory() {
 	room.requiredSouls = ROOM_REQUIRED_SOULS;
@@ -4259,14 +4194,12 @@ function enterNextRoomThroughPortal(direction = "sourceToDestination") {
 	room.index++;
 	room.seed = Math.floor(Math.random() * 1000000) + room.index * 9973;
 	resetRoomInventory();
-	doorCrossingState.active = false;
-	portalCameraCompression.value = 0;
-	portalCameraCompression.target = 0;
+	roomTopology.mode = "advance";
 	gainBattery(18, "NEXT ROOM");
 }
 
 
-window.graphicsDebug = function graphicsDebug() { return { ...graphicsSettings, legacyMode: isLegacyGraphicsMode(), particlesRuntimeEnabled: particlesRuntimeEnabled(), portalWindowRuntimeEnabled: portalWindowRuntimeEnabled(), presetContract: getGraphicsPreset(graphicsSettings.preset), pixelRatio: renderer.getPixelRatio(), shadowsEnabled: renderer.shadowMap.enabled, particleMeshVisible: !!(particleMesh && particleMesh.visible) }; };
+window.graphicsDebug = function graphicsDebug() { return { ...graphicsSettings, legacyMode: isLegacyGraphicsMode(), particlesRuntimeEnabled: particlesRuntimeEnabled(), portalWindowRuntimeEnabled: false, presetContract: getGraphicsPreset(graphicsSettings.preset), pixelRatio: renderer.getPixelRatio(), shadowsEnabled: renderer.shadowMap.enabled, particleMeshVisible: !!(particleMesh && particleMesh.visible) }; };
 window.portalDoorDebug = function portalDoorDebug() {
 	return {
 		roomIndex: room.index,
@@ -4284,26 +4217,40 @@ window.portalDoorDebug = function portalDoorDebug() {
 		tileIndex: getRoomTileIndex(player.pos.z)
 	};
 };
+window.roomTopologyDebug = function roomTopologyDebug() {
+	return {
+		playerWorldZ: player.pos.z,
+		localZ: wrapZ(player.pos.z),
+		previousTile: roomTopology.previousTileIndex,
+		currentTile: roomTopology.currentTileIndex,
+		roomIndex: room.index,
+		doorOpen: room.doorOpen,
+		mode: roomTopology.mode
+	};
+};
 
-function tryResolveDoorCrossing(previousPlayerZ = player.pos.z) {
-	// Continuous wrapped-space owner: no teleport/remap for closed-door looping.
+function updateRoomTopology(previousPlayerZ = player.pos.z, currentPlayerZ = player.pos.z) {
 	const previousTile = getRoomTileIndex(previousPlayerZ);
-	const currentTile = getRoomTileIndex(player.pos.z);
+	const currentTile = getRoomTileIndex(currentPlayerZ);
+	let advanced = false;
+	roomTopology.previousTileIndex = previousTile;
 	roomTopology.currentTileIndex = currentTile;
 	if (previousTile === currentTile) return false;
-	const withinDoorWidth = Math.abs(player.pos.x - roomExitPos.x) < fixedPortal.halfWidth;
-	const withinDoorAperture = withinDoorWidth && isInsideDoorAperture(player.pos, 0.04);
-	if (!withinDoorAperture) return false;
+	const localPlayerPos = getRoomLocalPosition(player.pos, roomLocalPositionTmp);
+	if (!isInsideDoorAperture(localPlayerPos, 0.04)) return false;
 	if (room.doorOpen && currentTile < previousTile) {
-		resolveDoorCrossingAction("advance", "sourceToDestination");
-		return true;
+		enterNextRoomThroughPortal("sourceToDestination");
+		roomTopology.previousTileIndex = previousTile;
+		roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
+		advanced = true;
 	}
-	return false;
+	roomTopology.mode = room.doorOpen ? "advance" : "loop";
+	return advanced;
 }
 
 function updateRoomLoop(dt) {
 	room.depositCooldown = Math.max(0, room.depositCooldown - dt);
-	roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
+	roomTopology.mode = room.doorOpen ? "advance" : "loop";
 	updateRoomVisuals();
 }
 
@@ -4706,7 +4653,7 @@ function spawnFlowerPowerup(x, y, z) {
 	mesh.position.set(drop.x, Math.max(FLOWER_POWERUP_GROUND_Y, y || FLOWER_POWERUP_GROUND_Y), drop.z);
 	mesh.rotation.y = Math.random() * Math.PI * 2;
 	mesh.visible = true;
-	const continuationMeshes = ROOM_CONTINUATION_OFFSETS.map(() => acquireFlowerPowerupMirrorMesh());
+	const continuationMeshes = ROOM_CONTINUATION_TILE_OFFSETS.map(() => acquireFlowerPowerupMirrorMesh());
 	flowerPowerups.push({ mesh, continuationMeshes, x: drop.x, y: mesh.position.y, z: drop.z, age: 0, value: FLOWER_PICKUP_VALUE, type: "flower" });
 	scheduleFlowerPowerupPoolWarmup();
 }
@@ -4738,7 +4685,11 @@ function updateFlowerPowerups(dt) {
 				const continuationMesh = powerup.continuationMeshes[c];
 				if (!continuationMesh) continue;
 				continuationMesh.visible = true;
-				continuationMesh.position.set(powerup.x, powerup.mesh ? powerup.mesh.position.y : powerup.y, powerup.z + tileOriginZ + ROOM_CONTINUATION_OFFSETS[c]);
+				continuationMesh.position.set(
+					powerup.x,
+					powerup.mesh ? powerup.mesh.position.y : powerup.y,
+					powerup.z + getContinuationTileOriginZ(ROOM_CONTINUATION_TILE_OFFSETS[c])
+				);
 				continuationMesh.rotation.y = powerup.mesh ? powerup.mesh.rotation.y : continuationMesh.rotation.y;
 			}
 		}
@@ -4819,7 +4770,7 @@ humanArmMesh.visible = false;
 humanLegMesh.visible = false;
 scene.add(humanHeadMesh, humanTorsoMesh, humanArmMesh, humanLegMesh);
 
-const CONTINUATION_INSTANCE_COUNT = TARGET_COUNT * ROOM_CONTINUATION_OFFSETS.length;
+const CONTINUATION_INSTANCE_COUNT = TARGET_COUNT * ROOM_CONTINUATION_TILE_OFFSETS.length;
 const continuationTargetMesh = new THREE.InstancedMesh(targetGeometry, targetMaterial.clone(), CONTINUATION_INSTANCE_COUNT);
 continuationTargetMesh.castShadow = false;
 continuationTargetMesh.receiveShadow = true;
@@ -6899,6 +6850,8 @@ function placePlayerAtRoomStart() {
 	player.jumpBufferTimer = 0;
 	player.airJumpsRemaining = phoneCharacter.jump.airJumps;
 	roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
+	roomTopology.previousTileIndex = roomTopology.currentTileIndex;
+	roomTopology.mode = room.doorOpen ? "advance" : "loop";
 }
 
 function resetRunState() {
@@ -6913,9 +6866,6 @@ function resetRunState() {
 	placePlayerAtRoomStart();
 	targetLock.target = -1;
 	targetLock.strength = 0;
-	doorCrossingState.active = false;
-	portalCameraCompression.value = 0;
-	portalCameraCompression.target = 0;
 	battery.value = battery.max;
 	battery.activity = "Idle";
 	clearActivePowerups();
@@ -7098,7 +7048,7 @@ function constrainThirdPersonCamera(desired, lookBase) {
 	cameraCollisionStart.copy(lookBase);
 	cameraCollisionStart.y += 0.58;
 	cameraCollisionEnd.copy(desired);
-	const tileOriginZ = getRoomTileOriginZ(getRoomTileIndex(lookBase.z));
+	const tileOriginZ = getPlayerRoomTileOriginZ();
 	const localStartZ = wrapZ(cameraCollisionStart.z);
 	const localEndZ = wrapZ(cameraCollisionEnd.z);
 	let nearestT = 1;
@@ -7201,7 +7151,7 @@ function updatePlayerPhysics(dt) {
 	if (player.grounded && player.jumpBufferTimer > 0) startGroundJump();
 	player.pos.addScaledVector(player.vel, dt);
 	resolvePlayerObstacleCollisions();
-	const crossedPortalDuringMove = tryResolveDoorCrossing(previousPlayerZ);
+	updateRoomTopology(previousPlayerZ, player.pos.z);
 	clampPlayerToRoomHeight();
 	const supportYAfterMove = getPlayerSupportY(player.pos.x, player.pos.z);
 	if (player.grounded) {
@@ -7586,12 +7536,12 @@ function updateTargets() {
 		// Wrapped-space continuity: mirror the active gameplay-visible entities into
 		// the repeated room shells. These copies are visual only. targetData, AI,
 		// collision, capture, and damage remain owned by the canonical active room.
-		for (let c = 0; c < ROOM_CONTINUATION_OFFSETS.length; c++) {
-			const continuationInstance = i * ROOM_CONTINUATION_OFFSETS.length + c;
-			const offsetZ = ROOM_CONTINUATION_OFFSETS[c];
+		for (let c = 0; c < ROOM_CONTINUATION_TILE_OFFSETS.length; c++) {
+			const continuationInstance = i * ROOM_CONTINUATION_TILE_OFFSETS.length + c;
+			const continuationOriginZ = getContinuationTileOriginZ(ROOM_CONTINUATION_TILE_OFFSETS[c]);
 			if (cubeMorph > 0.001) {
 				continuationMatrix.copy(dummy.matrix);
-				continuationMatrix.elements[14] += offsetZ;
+				continuationMatrix.setPosition(x, y, z + continuationOriginZ);
 				continuationTargetMesh.setMatrixAt(continuationInstance, continuationMatrix);
 			} else {
 				setHiddenContinuationInstance(continuationTargetMesh, continuationInstance);
@@ -7601,7 +7551,7 @@ function updateTargets() {
 				setContinuationHumanMirror(
 					continuationInstance,
 					x,
-					worldZ + offsetZ,
+					z + continuationOriginZ,
 					targetData[idx + T_WALK_YAW],
 					livingScale,
 					walkPhase
@@ -8001,45 +7951,6 @@ function updateCrosshair() {
 }
 
 
-function updateMirrorDoorCamera() {
-	if (!roomMirrorPlane) return;
-	// Window contract: render from the actual viewer camera mapped through the
-	// doorway, not from a special transition camera. This makes the door surface
-	// behave like a window into the same room.
-	mapSameRoomPortalPosition(camera.position, portalMappedCameraPosition);
-	mirrorCamera.position.copy(portalMappedCameraPosition);
-	mirrorCamera.quaternion.copy(camera.quaternion);
-	mirrorCamera.fov = camera.fov;
-	mirrorCamera.aspect = 4.18 / 3.12;
-	mirrorCamera.near = 0.05;
-	mirrorCamera.far = 90;
-	mirrorCamera.updateProjectionMatrix();
-	mirrorCamera.updateMatrixWorld(true);
-}
-
-
-function renderMirrorDoor() {
-	if (!roomMirrorPlane || !portalWindowRuntimeEnabled()) return;
-	updateMirrorDoorCamera();
-	const previousTarget = renderer.getRenderTarget();
-	const previousXrEnabled = renderer.xr.enabled;
-	const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
-	const previousVisible = roomMirrorPlane.visible;
-	const previousEntranceVisible = roomEntranceMirrorPlane ? roomEntranceMirrorPlane.visible : false;
-	roomMirrorPlane.visible = false;
-	if (roomEntranceMirrorPlane) roomEntranceMirrorPlane.visible = false;
-	renderer.xr.enabled = false;
-	renderer.shadowMap.autoUpdate = false;
-	renderer.setRenderTarget(mirrorRenderTarget);
-	renderer.clear(true, true, true);
-	renderer.render(scene, mirrorCamera);
-	renderer.setRenderTarget(previousTarget);
-	renderer.xr.enabled = previousXrEnabled;
-	renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
-	roomMirrorPlane.visible = previousVisible;
-	if (roomEntranceMirrorPlane) roomEntranceMirrorPlane.visible = previousEntranceVisible;
-}
-
 function updateRuntimeDiagnostics(dt) {
 	graphicsFpsState.frames += 1;
 	graphicsFpsState.accum += dt;
@@ -8060,8 +7971,8 @@ function updateRuntimeDiagnostics(dt) {
 		`PLAYER   x=${player.pos.x.toFixed(2)} y=${player.pos.y.toFixed(2)} z=${player.pos.z.toFixed(2)} v=${player.vel.length().toFixed(2)}`,
 		`BATTERY  main=${battery.value.toFixed(1)} supplemental=${supplementalBattery.value.toFixed(1)} stacks=${activePowerupStacks.flower || 0}`,
 		`SOULS    stored=${stored} pendingShots=${pendingDischargedSouls.length} flowers=${flowerPowerups.length} flowerPool=${flowerPowerupPool.length}`,
-		`DOOR     crossing=${doorCrossingState.active ? doorCrossingState.mode : "idle"} dir=${doorCrossingState.direction} tile=${getRoomTileIndex(player.pos.z)}`,
-		`GRAPHICS preset=${graphicsSettings.preset} legacy=${isLegacyGraphicsMode() ? "yes" : "no"} scale=${Math.round(graphicsSettings.renderScale * 100)}% portalWindow=${portalWindowRuntimeEnabled() ? "on" : "off"} particles=${particlesRuntimeEnabled() ? "on" : "off"}`,
+		`DOOR     mode=${roomTopology.mode} prevTile=${roomTopology.previousTileIndex} tile=${roomTopology.currentTileIndex}`,
+		`GRAPHICS preset=${graphicsSettings.preset} legacy=${isLegacyGraphicsMode() ? "yes" : "no"} scale=${Math.round(graphicsSettings.renderScale * 100)}% portalWindow=off particles=${particlesRuntimeEnabled() ? "on" : "off"}`,
 		`FPS      ${graphicsFpsState.value}`
 	];
 	runtimeDebugState.text = lines.join("\n");
@@ -8080,16 +7991,6 @@ function updateFrame(time = 0) {
 	}
 	if (game.uiPaused) {
 		clock.getDelta();
-		updateCamera();
-		updateScreenFlash();
-		updateTargets();
-		updateCrosshair();
-		applyCrosshairArmTransforms();
-		updateSoulWindowMotion();
-		return;
-	}
-	if (doorCrossingState.active) {
-		updateDoorCrossingState(dt);
 		updateCamera();
 		updateScreenFlash();
 		updateTargets();
@@ -8121,7 +8022,6 @@ function updateFrame(time = 0) {
 function animate(time = 0) {
 	requestAnimationFrame(animate);
 	updateFrame(time);
-	renderMirrorDoor();
 	renderer.render(scene, camera);
 }
 
