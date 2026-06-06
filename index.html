@@ -3621,12 +3621,12 @@ function clearRoomEnvironment() {
 }
 
 function getVisibleRoomTileGroup(tileOffset = 0) {
-	const tileIndex = tileOffset + 1;
-	if (tileIndex < 0) throw new Error(`Unknown room tile offset: ${tileOffset}`);
-	if (tileIndex >= visibleRoomTileGroups.length || VISIBLE_ROOM_TILE_INDEX_OFFSETS[tileIndex] !== tileOffset) {
-		throw new Error(`Unknown room tile offset: ${tileOffset}`);
+	const groupIndex = tileOffset + 1;
+	if (groupIndex < 0) throw new Error(`Negative room tile group index: ${tileOffset}`);
+	if (groupIndex >= visibleRoomTileGroups.length || VISIBLE_ROOM_TILE_INDEX_OFFSETS[groupIndex] !== tileOffset) {
+		throw new Error(`Invalid room tile group offset: ${tileOffset}`);
 	}
-	return visibleRoomTileGroups[tileIndex];
+	return visibleRoomTileGroups[groupIndex];
 }
 
 function addRoomBox(width, height, depth, x, y, z, material, parent = roomCenterTileGroup) {
@@ -7524,7 +7524,7 @@ function updateTargets() {
 		// collision, capture, and damage remain owned by the canonical active room.
 		for (let c = 0; c < ROOM_CONTINUATION_TILE_OFFSETS.length; c++) {
 			const continuationInstance = i * ROOM_CONTINUATION_TILE_OFFSETS.length + c;
-			const continuationOffsetZ = getRoomTileOriginZ(ROOM_CONTINUATION_TILE_OFFSETS[c]);
+			const continuationOffsetZ = ROOM_CONTINUATION_TILE_OFFSETS[c] * ROOM_DEPTH;
 			if (cubeMorph > 0.001) {
 				continuationMatrix.copy(dummy.matrix);
 				continuationMatrix.elements[MATRIX_TRANSLATION_Z_INDEX] += continuationOffsetZ;
