@@ -3435,8 +3435,8 @@ const ROOM_WALL_HEIGHT = 7.2;
 const ROOM_EXIT_Z = -ROOM_DEPTH / 2 + 1.15;
 const ROOM_START_Z = ROOM_DEPTH / 2 - 5.5;
 const ROOM_GRID_Z = ROOM_EXIT_Z + 0.42;
-const VISIBLE_ROOM_TILE_OFFSETS = [-1, 0, 1];
-const ROOM_CONTINUATION_TILE_OFFSETS = VISIBLE_ROOM_TILE_OFFSETS.filter((tileOffset) => tileOffset !== 0);
+const VISIBLE_ROOM_TILE_INDEX_OFFSETS = [-1, 0, 1];
+const ROOM_CONTINUATION_TILE_OFFSETS = VISIBLE_ROOM_TILE_INDEX_OFFSETS.filter((tileOffset) => tileOffset !== 0);
 const ROOM_GRID_RADIUS = 2.3;
 const ROOM_GOAL_Y = 3.05;
 const ROOM_DEPOSIT_HIT_RADIUS = 1.65;
@@ -3445,12 +3445,12 @@ const ROOM_MIN_SPAWN_Z = -ROOM_DEPTH / 2 + 9;
 const ROOM_MAX_SPAWN_Z = ROOM_DEPTH / 2 - 7;
 const roomGroup = new THREE.Group();
 scene.add(roomGroup);
-const visibleRoomTileGroups = VISIBLE_ROOM_TILE_OFFSETS.map(() => {
+const visibleRoomTileGroups = VISIBLE_ROOM_TILE_INDEX_OFFSETS.map(() => {
 	const group = new THREE.Group();
 	roomGroup.add(group);
 	return group;
 });
-const roomCenterTileGroup = visibleRoomTileGroups[VISIBLE_ROOM_TILE_OFFSETS.indexOf(0)];
+const roomCenterTileGroup = visibleRoomTileGroups[VISIBLE_ROOM_TILE_INDEX_OFFSETS.indexOf(0)];
 const roomGridCells = [];
 const roomGridSoulCubes = [];
 const roomColliders = [];
@@ -3486,8 +3486,9 @@ const room = {
 	depositCooldown: 0
 };
 // roomTopology tracks wrapped room-space traversal. `currentTileIndex` and
-// `previousTileIndex` follow the player's continuous world-space tile, while
-// `mode` reports whether doorway crossings currently loop or advance.
+// `previousTileIndex` are the player's current and previous discrete tile
+// indices, while `mode` reports whether doorway crossings currently loop or
+// advance.
 const roomTopology = {
 	currentTileIndex: 0,
 	previousTileIndex: 0,
@@ -3620,8 +3621,9 @@ function clearRoomEnvironment() {
 }
 
 function getVisibleRoomTileGroup(tileOffset = 0) {
-	const tileIndex = VISIBLE_ROOM_TILE_OFFSETS.indexOf(tileOffset);
-	return tileIndex >= 0 ? visibleRoomTileGroups[tileIndex] : roomCenterTileGroup;
+	const tileIndex = VISIBLE_ROOM_TILE_INDEX_OFFSETS.indexOf(tileOffset);
+	if (tileIndex < 0) throw new Error(`Unknown room tile offset: ${tileOffset}`);
+	return visibleRoomTileGroups[tileIndex];
 }
 
 function addRoomBox(width, height, depth, x, y, z, material, parent = roomCenterTileGroup) {
@@ -3799,7 +3801,7 @@ function renderGoalSlots() {
 function updateVisibleRoomTilePositions() {
 	roomGroup.position.z = 0;
 	for (let i = 0; i < visibleRoomTileGroups.length; i++) {
-		visibleRoomTileGroups[i].position.z = getRoomTileOriginZ(roomTopology.currentTileIndex + VISIBLE_ROOM_TILE_OFFSETS[i]);
+		visibleRoomTileGroups[i].position.z = getRoomTileOriginZ(roomTopology.currentTileIndex + VISIBLE_ROOM_TILE_INDEX_OFFSETS[i]);
 	}
 }
 
@@ -4212,9 +4214,9 @@ window.portalDoorDebug = function portalDoorDebug() {
 function updateRoomTopology(previousPlayerZ = player.pos.z, currentPlayerZ = player.pos.z) {
 	const previousTile = getRoomTileIndex(previousPlayerZ);
 	const currentTile = getRoomTileIndex(currentPlayerZ);
+	let advanced = false;
 	roomTopology.previousTileIndex = previousTile;
 	roomTopology.currentTileIndex = currentTile;
-	roomTopology.mode = room.doorOpen ? "advance" : "loop";
 	if (previousTile === currentTile) return false;
 	const localPlayerPos = getRoomLocalPosition(player.pos, roomLocalPositionTmp);
 	if (!isInsideDoorAperture(localPlayerPos, 0.04)) return false;
@@ -4222,10 +4224,10 @@ function updateRoomTopology(previousPlayerZ = player.pos.z, currentPlayerZ = pla
 		enterNextRoomThroughPortal("sourceToDestination");
 		roomTopology.previousTileIndex = previousTile;
 		roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
-		roomTopology.mode = room.doorOpen ? "advance" : "loop";
-		return true;
+		advanced = true;
 	}
-	return false;
+	roomTopology.mode = room.doorOpen ? "advance" : "loop";
+	return advanced;
 }
 
 function updateRoomLoop(dt) {
@@ -4765,6 +4767,7 @@ for (const mesh of [continuationHumanHeadMesh, continuationHumanTorsoMesh, conti
 	scene.add(mesh);
 }
 const continuationMatrix = new THREE.Matrix4();
+const MATRIX_TRANSLATION_Z_INDEX = 14;
 
 function setHiddenContinuationInstance(mesh, instance) {
 	dummy.position.set(0, -999, 0);
@@ -7521,7 +7524,7 @@ function updateTargets() {
 			const continuationTileOriginZ = getRoomTileOriginZ(roomTopology.currentTileIndex + ROOM_CONTINUATION_TILE_OFFSETS[c]);
 			if (cubeMorph > 0.001) {
 				continuationMatrix.copy(dummy.matrix);
-				continuationMatrix.elements[14] = z + continuationTileOriginZ;
+				continuationMatrix.elements[MATRIX_TRANSLATION_Z_INDEX] = z + continuationTileOriginZ;
 				continuationTargetMesh.setMatrixAt(continuationInstance, continuationMatrix);
 			} else {
 				setHiddenContinuationInstance(continuationTargetMesh, continuationInstance);
