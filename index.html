@@ -4785,7 +4785,6 @@ for (const mesh of [continuationHumanHeadMesh, continuationHumanTorsoMesh, conti
 	scene.add(mesh);
 }
 const continuationMatrix = new THREE.Matrix4();
-const MATRIX_TRANSLATION_Z_INDEX = 14; // Three.js Matrix4 z-translation element.
 
 function setHiddenContinuationInstance(mesh, instance) {
 	dummy.position.set(0, -999, 0);
@@ -7542,7 +7541,7 @@ function updateTargets() {
 			const continuationOriginZ = getContinuationTileOriginZ(ROOM_CONTINUATION_TILE_OFFSETS[c]);
 			if (cubeMorph > 0.001) {
 				continuationMatrix.copy(dummy.matrix);
-				continuationMatrix.elements[MATRIX_TRANSLATION_Z_INDEX] = z + continuationOriginZ;
+				continuationMatrix.setPosition(x, y, z + continuationOriginZ);
 				continuationTargetMesh.setMatrixAt(continuationInstance, continuationMatrix);
 			} else {
 				setHiddenContinuationInstance(continuationTargetMesh, continuationInstance);
