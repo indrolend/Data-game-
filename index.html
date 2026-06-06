@@ -2293,8 +2293,10 @@ function particlesRuntimeEnabled() {
 	return !!graphicsSettings.particles;
 }
 
+const ENABLE_PORTAL_MIRROR_RUNTIME = false;
+
 function portalWindowRuntimeEnabled() {
-	return !!graphicsSettings.portalWindow;
+	return ENABLE_PORTAL_MIRROR_RUNTIME && !!graphicsSettings.portalWindow;
 }
 
 function applyPortalWindowMaterialContract(plane) {
@@ -3541,7 +3543,7 @@ function getPlayerLocalZ() {
 }
 
 function getPlayerRoomTileOriginZ() {
-	return getRoomTileOriginZ(getRoomTileIndex(player.pos.z));
+	return getRoomTileOriginZ(roomTopology.currentTileIndex);
 }
 
 function isInsideDoorAperture(position, pad = 0) {
@@ -3655,8 +3657,8 @@ function addRoomCollider(width, height, depth, x, y, z) {
 
 /* ── Same-room door topology pipeline ───────────────────────────────────────
  *  The doorway is only an opening. Gameplay owns the topology:
- *    locked source door crossing      → remap player to destination doorway
- *    locked destination door crossing → remap player back to source doorway
+ *    locked source door crossing      → keep looping the same room tile
+ *    locked destination door crossing → keep looping the same room tile
  *    open source door crossing        → advance to the next room
  *  There is no transition camera, no mask, and no room rebuild while locked.
  * ─────────────────────────────────────────────────────────────────────── */
@@ -3728,13 +3730,13 @@ function buildRoomEnvironment() {
 		frame.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z - 0.04);
 		frame.castShadow = false;
 		frame.receiveShadow = false;
-		roomGroup.add(frame);
+		roomCenterTileGroup.add(frame);
 
 		const hole = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.52, 0.08), goalHoleMat.clone());
 		hole.position.set(x, ROOM_GOAL_Y, ROOM_GRID_Z);
 		hole.castShadow = false;
 		hole.receiveShadow = false;
-		roomGroup.add(hole);
+		roomCenterTileGroup.add(hole);
 
 		roomGridCells.push({ rim: frame, hole, pole: null, backboard: null, x, y: ROOM_GOAL_Y, z: ROOM_GRID_Z });
 
@@ -3742,7 +3744,7 @@ function buildRoomEnvironment() {
 		cube.position.set(x, -999, ROOM_GRID_Z + 0.12);
 		cube.castShadow = true;
 		cube.receiveShadow = true;
-		roomGroup.add(cube);
+		roomCenterTileGroup.add(cube);
 		roomGridSoulCubes.push(cube);
 		for (let c = 0; c < ROOM_CONTINUATION_TILE_OFFSETS.length; c++) {
 			const tileGroup = getVisibleRoomTileGroup(ROOM_CONTINUATION_TILE_OFFSETS[c]);
@@ -4171,40 +4173,6 @@ function setDoorCrossingMaskActive(active) {
 	doorCrossingMask.classList.toggle("active", false);
 }
 
-function captureDoorCrossingState(mode, direction = "sourceToDestination") {
-	doorCrossingState.mode = mode;
-	doorCrossingState.direction = direction;
-	doorCrossingState.time = 0;
-	doorCrossingState.playerPosAtCross.copy(player.pos);
-	doorCrossingState.playerVelAtCross.copy(player.vel);
-	doorCrossingState.yawAtCross = cursor.yaw;
-	doorCrossingState.pitchAtCross = cursor.pitch;
-}
-
-function resolveDoorCrossingAction(mode, direction = "sourceToDestination") {
-	// Door crossing dispatcher: gameplay/topology only. Portal-window rendering is
-	// handled separately by renderMirrorDoor().
-	captureDoorCrossingState(mode, direction);
-	if (mode === "advance") {
-		enterNextRoomThroughPortal(direction);
-	}
-	doorCrossingState.active = false;
-}
-
-function finishDoorCrossing() {
-	doorCrossingState.active = false;
-	setDoorCrossingMaskActive(false);
-}
-
-function updateDoorCrossingState(dt) {
-	// Kept as a safe no-op guard for older transition-style frame paths.
-	doorCrossingState.active = false;
-}
-
-function applyPortalBodyHandoff(targetRoomAdvanced = false) {
-	// Compatibility no-op: wrapped-space continuity no longer remaps player/camera.
-}
-
 /* Shared room teardown/rebuild called by both enterNextRoomThroughPortal and resetRunState. */
 function resetRoomInventory() {
 	room.requiredSouls = ROOM_REQUIRED_SOULS;
@@ -4228,9 +4196,7 @@ function enterNextRoomThroughPortal(direction = "sourceToDestination") {
 	room.index++;
 	room.seed = Math.floor(Math.random() * 1000000) + room.index * 9973;
 	resetRoomInventory();
-	doorCrossingState.active = false;
-	portalCameraCompression.value = 0;
-	portalCameraCompression.target = 0;
+	roomTopology.mode = "advance";
 	gainBattery(18, "NEXT ROOM");
 }
 
@@ -4254,17 +4220,20 @@ window.portalDoorDebug = function portalDoorDebug() {
 	};
 };
 
-function tryResolveDoorCrossing(previousPlayerZ = player.pos.z) {
-	// Continuous wrapped-space owner: no teleport/remap for closed-door looping.
+function updateRoomTopology(previousPlayerZ = player.pos.z, currentPlayerZ = player.pos.z) {
 	const previousTile = getRoomTileIndex(previousPlayerZ);
-	const currentTile = getRoomTileIndex(player.pos.z);
+	const currentTile = getRoomTileIndex(currentPlayerZ);
+	roomTopology.previousTileIndex = previousTile;
 	roomTopology.currentTileIndex = currentTile;
+	roomTopology.mode = room.doorOpen ? "advance" : "loop";
 	if (previousTile === currentTile) return false;
-	const withinDoorWidth = Math.abs(player.pos.x - roomExitPos.x) < fixedPortal.halfWidth;
-	const withinDoorAperture = withinDoorWidth && isInsideDoorAperture(player.pos, 0.04);
-	if (!withinDoorAperture) return false;
+	const localPlayerPos = getRoomLocalPosition(player.pos, shotClosestPos);
+	if (!isInsideDoorAperture(localPlayerPos, 0.04)) return false;
 	if (room.doorOpen && currentTile < previousTile) {
-		resolveDoorCrossingAction("advance", "sourceToDestination");
+		enterNextRoomThroughPortal("sourceToDestination");
+		roomTopology.previousTileIndex = previousTile;
+		roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
+		roomTopology.mode = room.doorOpen ? "advance" : "loop";
 		return true;
 	}
 	return false;
@@ -4272,9 +4241,19 @@ function tryResolveDoorCrossing(previousPlayerZ = player.pos.z) {
 
 function updateRoomLoop(dt) {
 	room.depositCooldown = Math.max(0, room.depositCooldown - dt);
-	roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
+	roomTopology.mode = room.doorOpen ? "advance" : "loop";
 	updateRoomVisuals();
 }
+
+window.roomTopologyDebug = () => ({
+	playerWorldZ: player.pos.z,
+	localZ: wrapZ(player.pos.z),
+	previousTile: roomTopology.previousTileIndex,
+	currentTile: roomTopology.currentTileIndex,
+	roomIndex: room.index,
+	doorOpen: room.doorOpen,
+	mode: roomTopology.mode
+});
 
 buildRoomEnvironment();
 
@@ -4675,7 +4654,7 @@ function spawnFlowerPowerup(x, y, z) {
 	mesh.position.set(drop.x, Math.max(FLOWER_POWERUP_GROUND_Y, y || FLOWER_POWERUP_GROUND_Y), drop.z);
 	mesh.rotation.y = Math.random() * Math.PI * 2;
 	mesh.visible = true;
-	const continuationMeshes = ROOM_CONTINUATION_OFFSETS.map(() => acquireFlowerPowerupMirrorMesh());
+	const continuationMeshes = ROOM_CONTINUATION_TILE_OFFSETS.map(() => acquireFlowerPowerupMirrorMesh());
 	flowerPowerups.push({ mesh, continuationMeshes, x: drop.x, y: mesh.position.y, z: drop.z, age: 0, value: FLOWER_PICKUP_VALUE, type: "flower" });
 	scheduleFlowerPowerupPoolWarmup();
 }
@@ -4707,7 +4686,11 @@ function updateFlowerPowerups(dt) {
 				const continuationMesh = powerup.continuationMeshes[c];
 				if (!continuationMesh) continue;
 				continuationMesh.visible = true;
-				continuationMesh.position.set(powerup.x, powerup.mesh ? powerup.mesh.position.y : powerup.y, powerup.z + tileOriginZ + ROOM_CONTINUATION_OFFSETS[c]);
+				continuationMesh.position.set(
+					powerup.x,
+					powerup.mesh ? powerup.mesh.position.y : powerup.y,
+					powerup.z + getRoomTileOriginZ(roomTopology.currentTileIndex + ROOM_CONTINUATION_TILE_OFFSETS[c])
+				);
 				continuationMesh.rotation.y = powerup.mesh ? powerup.mesh.rotation.y : continuationMesh.rotation.y;
 			}
 		}
@@ -4788,7 +4771,7 @@ humanArmMesh.visible = false;
 humanLegMesh.visible = false;
 scene.add(humanHeadMesh, humanTorsoMesh, humanArmMesh, humanLegMesh);
 
-const CONTINUATION_INSTANCE_COUNT = TARGET_COUNT * ROOM_CONTINUATION_OFFSETS.length;
+const CONTINUATION_INSTANCE_COUNT = TARGET_COUNT * ROOM_CONTINUATION_TILE_OFFSETS.length;
 const continuationTargetMesh = new THREE.InstancedMesh(targetGeometry, targetMaterial.clone(), CONTINUATION_INSTANCE_COUNT);
 continuationTargetMesh.castShadow = false;
 continuationTargetMesh.receiveShadow = true;
@@ -6868,6 +6851,8 @@ function placePlayerAtRoomStart() {
 	player.jumpBufferTimer = 0;
 	player.airJumpsRemaining = phoneCharacter.jump.airJumps;
 	roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
+	roomTopology.previousTileIndex = roomTopology.currentTileIndex;
+	roomTopology.mode = room.doorOpen ? "advance" : "loop";
 }
 
 function resetRunState() {
@@ -6882,9 +6867,6 @@ function resetRunState() {
 	placePlayerAtRoomStart();
 	targetLock.target = -1;
 	targetLock.strength = 0;
-	doorCrossingState.active = false;
-	portalCameraCompression.value = 0;
-	portalCameraCompression.target = 0;
 	battery.value = battery.max;
 	battery.activity = "Idle";
 	clearActivePowerups();
@@ -7067,7 +7049,7 @@ function constrainThirdPersonCamera(desired, lookBase) {
 	cameraCollisionStart.copy(lookBase);
 	cameraCollisionStart.y += 0.58;
 	cameraCollisionEnd.copy(desired);
-	const tileOriginZ = getRoomTileOriginZ(getRoomTileIndex(lookBase.z));
+	const tileOriginZ = getPlayerRoomTileOriginZ();
 	const localStartZ = wrapZ(cameraCollisionStart.z);
 	const localEndZ = wrapZ(cameraCollisionEnd.z);
 	let nearestT = 1;
@@ -7170,7 +7152,7 @@ function updatePlayerPhysics(dt) {
 	if (player.grounded && player.jumpBufferTimer > 0) startGroundJump();
 	player.pos.addScaledVector(player.vel, dt);
 	resolvePlayerObstacleCollisions();
-	const crossedPortalDuringMove = tryResolveDoorCrossing(previousPlayerZ);
+	updateRoomTopology(previousPlayerZ, player.pos.z);
 	clampPlayerToRoomHeight();
 	const supportYAfterMove = getPlayerSupportY(player.pos.x, player.pos.z);
 	if (player.grounded) {
@@ -7555,12 +7537,12 @@ function updateTargets() {
 		// Wrapped-space continuity: mirror the active gameplay-visible entities into
 		// the repeated room shells. These copies are visual only. targetData, AI,
 		// collision, capture, and damage remain owned by the canonical active room.
-		for (let c = 0; c < ROOM_CONTINUATION_OFFSETS.length; c++) {
-			const continuationInstance = i * ROOM_CONTINUATION_OFFSETS.length + c;
-			const offsetZ = ROOM_CONTINUATION_OFFSETS[c];
+		for (let c = 0; c < ROOM_CONTINUATION_TILE_OFFSETS.length; c++) {
+			const continuationInstance = i * ROOM_CONTINUATION_TILE_OFFSETS.length + c;
+			const continuationTileOriginZ = getRoomTileOriginZ(roomTopology.currentTileIndex + ROOM_CONTINUATION_TILE_OFFSETS[c]);
 			if (cubeMorph > 0.001) {
 				continuationMatrix.copy(dummy.matrix);
-				continuationMatrix.elements[14] += offsetZ;
+				continuationMatrix.elements[14] = z + continuationTileOriginZ;
 				continuationTargetMesh.setMatrixAt(continuationInstance, continuationMatrix);
 			} else {
 				setHiddenContinuationInstance(continuationTargetMesh, continuationInstance);
@@ -7570,7 +7552,7 @@ function updateTargets() {
 				setContinuationHumanMirror(
 					continuationInstance,
 					x,
-					worldZ + offsetZ,
+					z + continuationTileOriginZ,
 					targetData[idx + T_WALK_YAW],
 					livingScale,
 					walkPhase
@@ -7970,43 +7952,8 @@ function updateCrosshair() {
 }
 
 
-function updateMirrorDoorCamera() {
-	if (!roomMirrorPlane) return;
-	// Window contract: render from the actual viewer camera mapped through the
-	// doorway, not from a special transition camera. This makes the door surface
-	// behave like a window into the same room.
-	mapSameRoomPortalPosition(camera.position, portalMappedCameraPosition);
-	mirrorCamera.position.copy(portalMappedCameraPosition);
-	mirrorCamera.quaternion.copy(camera.quaternion);
-	mirrorCamera.fov = camera.fov;
-	mirrorCamera.aspect = 4.18 / 3.12;
-	mirrorCamera.near = 0.05;
-	mirrorCamera.far = 90;
-	mirrorCamera.updateProjectionMatrix();
-	mirrorCamera.updateMatrixWorld(true);
-}
-
-
 function renderMirrorDoor() {
-	if (!roomMirrorPlane || !portalWindowRuntimeEnabled()) return;
-	updateMirrorDoorCamera();
-	const previousTarget = renderer.getRenderTarget();
-	const previousXrEnabled = renderer.xr.enabled;
-	const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
-	const previousVisible = roomMirrorPlane.visible;
-	const previousEntranceVisible = roomEntranceMirrorPlane ? roomEntranceMirrorPlane.visible : false;
-	roomMirrorPlane.visible = false;
-	if (roomEntranceMirrorPlane) roomEntranceMirrorPlane.visible = false;
-	renderer.xr.enabled = false;
-	renderer.shadowMap.autoUpdate = false;
-	renderer.setRenderTarget(mirrorRenderTarget);
-	renderer.clear(true, true, true);
-	renderer.render(scene, mirrorCamera);
-	renderer.setRenderTarget(previousTarget);
-	renderer.xr.enabled = previousXrEnabled;
-	renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
-	roomMirrorPlane.visible = previousVisible;
-	if (roomEntranceMirrorPlane) roomEntranceMirrorPlane.visible = previousEntranceVisible;
+	return;
 }
 
 function updateRuntimeDiagnostics(dt) {
@@ -8029,7 +7976,7 @@ function updateRuntimeDiagnostics(dt) {
 		`PLAYER   x=${player.pos.x.toFixed(2)} y=${player.pos.y.toFixed(2)} z=${player.pos.z.toFixed(2)} v=${player.vel.length().toFixed(2)}`,
 		`BATTERY  main=${battery.value.toFixed(1)} supplemental=${supplementalBattery.value.toFixed(1)} stacks=${activePowerupStacks.flower || 0}`,
 		`SOULS    stored=${stored} pendingShots=${pendingDischargedSouls.length} flowers=${flowerPowerups.length} flowerPool=${flowerPowerupPool.length}`,
-		`DOOR     crossing=${doorCrossingState.active ? doorCrossingState.mode : "idle"} dir=${doorCrossingState.direction} tile=${getRoomTileIndex(player.pos.z)}`,
+		`DOOR     mode=${roomTopology.mode} prevTile=${roomTopology.previousTileIndex} tile=${roomTopology.currentTileIndex}`,
 		`GRAPHICS preset=${graphicsSettings.preset} legacy=${isLegacyGraphicsMode() ? "yes" : "no"} scale=${Math.round(graphicsSettings.renderScale * 100)}% portalWindow=${portalWindowRuntimeEnabled() ? "on" : "off"} particles=${particlesRuntimeEnabled() ? "on" : "off"}`,
 		`FPS      ${graphicsFpsState.value}`
 	];
@@ -8049,16 +7996,6 @@ function updateFrame(time = 0) {
 	}
 	if (game.uiPaused) {
 		clock.getDelta();
-		updateCamera();
-		updateScreenFlash();
-		updateTargets();
-		updateCrosshair();
-		applyCrosshairArmTransforms();
-		updateSoulWindowMotion();
-		return;
-	}
-	if (doorCrossingState.active) {
-		updateDoorCrossingState(dt);
 		updateCamera();
 		updateScreenFlash();
 		updateTargets();
@@ -8090,7 +8027,6 @@ function updateFrame(time = 0) {
 function animate(time = 0) {
 	requestAnimationFrame(animate);
 	updateFrame(time);
-	renderMirrorDoor();
 	renderer.render(scene, camera);
 }
 
