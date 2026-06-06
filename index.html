@@ -2293,17 +2293,12 @@ function particlesRuntimeEnabled() {
 	return !!graphicsSettings.particles;
 }
 
-function portalWindowRuntimeEnabled() {
-	return false;
-}
-
 function applyPortalWindowMaterialContract(plane) {
 	if (!plane || !plane.material) return;
-	const enabled = portalWindowRuntimeEnabled();
 	plane.material.map = null;
-	plane.material.color.setHex(enabled ? 0xffffff : 0x0d1820);
+	plane.material.color.setHex(0x0d1820);
 	plane.material.transparent = true;
-	plane.material.opacity = enabled ? 1.0 : 0.42;
+	plane.material.opacity = 0.42;
 	plane.material.needsUpdate = true;
 }
 
@@ -3490,6 +3485,9 @@ const room = {
 	doorOpen: false,
 	depositCooldown: 0
 };
+// roomTopology tracks wrapped room-space traversal. `currentTileIndex` and
+// `previousTileIndex` follow the player's continuous world-space tile, while
+// `mode` reports whether doorway crossings currently loop or advance.
 const roomTopology = {
 	currentTileIndex: 0,
 	previousTileIndex: 0,
@@ -3650,8 +3648,7 @@ function addRoomCollider(width, height, depth, x, y, z) {
 
 /* ── Same-room door topology pipeline ───────────────────────────────────────
  *  The doorway is only an opening. Gameplay owns the topology:
- *    locked source door crossing      → keep looping the same room tile
- *    locked destination door crossing → keep looping the same room tile
+ *    locked door crossing             → keep looping the same room tile
  *    open source door crossing        → advance to the next room
  *  There is no transition camera, no mask, and no room rebuild while locked.
  * ─────────────────────────────────────────────────────────────────────── */
@@ -4193,7 +4190,7 @@ function enterNextRoomThroughPortal(direction = "sourceToDestination") {
 }
 
 
-window.graphicsDebug = function graphicsDebug() { return { ...graphicsSettings, legacyMode: isLegacyGraphicsMode(), particlesRuntimeEnabled: particlesRuntimeEnabled(), portalWindowRuntimeEnabled: portalWindowRuntimeEnabled(), presetContract: getGraphicsPreset(graphicsSettings.preset), pixelRatio: renderer.getPixelRatio(), shadowsEnabled: renderer.shadowMap.enabled, particleMeshVisible: !!(particleMesh && particleMesh.visible) }; };
+window.graphicsDebug = function graphicsDebug() { return { ...graphicsSettings, legacyMode: isLegacyGraphicsMode(), particlesRuntimeEnabled: particlesRuntimeEnabled(), portalWindowRuntimeEnabled: false, presetContract: getGraphicsPreset(graphicsSettings.preset), pixelRatio: renderer.getPixelRatio(), shadowsEnabled: renderer.shadowMap.enabled, particleMeshVisible: !!(particleMesh && particleMesh.visible) }; };
 window.portalDoorDebug = function portalDoorDebug() {
 	return {
 		roomIndex: room.index,
@@ -4236,16 +4233,6 @@ function updateRoomLoop(dt) {
 	roomTopology.mode = room.doorOpen ? "advance" : "loop";
 	updateRoomVisuals();
 }
-
-window.roomTopologyDebug = () => ({
-	playerWorldZ: player.pos.z,
-	localZ: wrapZ(player.pos.z),
-	previousTile: roomTopology.previousTileIndex,
-	currentTile: roomTopology.currentTileIndex,
-	roomIndex: room.index,
-	doorOpen: room.doorOpen,
-	mode: roomTopology.mode
-});
 
 buildRoomEnvironment();
 
@@ -7965,7 +7952,7 @@ function updateRuntimeDiagnostics(dt) {
 		`BATTERY  main=${battery.value.toFixed(1)} supplemental=${supplementalBattery.value.toFixed(1)} stacks=${activePowerupStacks.flower || 0}`,
 		`SOULS    stored=${stored} pendingShots=${pendingDischargedSouls.length} flowers=${flowerPowerups.length} flowerPool=${flowerPowerupPool.length}`,
 		`DOOR     mode=${roomTopology.mode} prevTile=${roomTopology.previousTileIndex} tile=${roomTopology.currentTileIndex}`,
-		`GRAPHICS preset=${graphicsSettings.preset} legacy=${isLegacyGraphicsMode() ? "yes" : "no"} scale=${Math.round(graphicsSettings.renderScale * 100)}% portalWindow=${portalWindowRuntimeEnabled() ? "on" : "off"} particles=${particlesRuntimeEnabled() ? "on" : "off"}`,
+		`GRAPHICS preset=${graphicsSettings.preset} legacy=${isLegacyGraphicsMode() ? "yes" : "no"} scale=${Math.round(graphicsSettings.renderScale * 100)}% portalWindow=off particles=${particlesRuntimeEnabled() ? "on" : "off"}`,
 		`FPS      ${graphicsFpsState.value}`
 	];
 	runtimeDebugState.text = lines.join("\n");
