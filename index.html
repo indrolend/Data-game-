@@ -3307,7 +3307,7 @@ function completeTargetCapture(i, x, y, z) {
 		tile.classList.add("capture-pulse");
 	}
 
-	spawnParticleBurst(x, y, z);
+	spawnRoomParticleBurst(x, y, z);
 	syncStoredMirror();
 	clearTargetSlot(i);
 	queueHumanRespawnFromSoul(i, x, y, z);
@@ -3489,9 +3489,10 @@ const room = {
 	requiredSouls: ROOM_REQUIRED_SOULS,
 	depositedSouls: 0,
 	doorOpen: false,
-	depositCooldown: 0,
-	doorLoopCooldown: 0,
-	lastDoorCheckZ: ROOM_START_Z
+	depositCooldown: 0
+};
+const roomTopology = {
+	currentTileIndex: 0
 };
 
 const doorCrossingState = {
@@ -3523,9 +3524,6 @@ const fixedPortal = {
 	maxCameraDistance: ROOM_DEPTH - 5.0
 };
 const portalMappedCameraPosition = new THREE.Vector3();
-const portalMappedPlayerPosition = new THREE.Vector3();
-const portalMappedVelocity = new THREE.Vector3();
-const portalCrossingCameraDelta = new THREE.Vector3();
 const portalVirtualEye = new THREE.Vector3();
 const portalVirtualLook = new THREE.Vector3();
 const portalVirtualAim = new THREE.Vector3();
@@ -3547,19 +3545,46 @@ function updatePortalCameraCompression() {
 	return 0;
 }
 
+function getRoomTileIndex(z) {
+	return Math.floor((z + ROOM_DEPTH * 0.5) / ROOM_DEPTH);
+}
+
+function getRoomTileOriginZ(tileIndex) {
+	return tileIndex * ROOM_DEPTH;
+}
+
+function wrapZ(z) {
+	return z - getRoomTileOriginZ(getRoomTileIndex(z));
+}
+
+function getRoomLocalPosition(worldPosition, target = new THREE.Vector3()) {
+	target.copy(worldPosition);
+	target.z = wrapZ(worldPosition.z);
+	return target;
+}
+
+function getPlayerLocalZ() {
+	return wrapZ(player.pos.z);
+}
+
+function getPlayerRoomTileOriginZ() {
+	return getRoomTileOriginZ(getRoomTileIndex(player.pos.z));
+}
+
 function mapSameRoomPortalPosition(sourcePosition, target = new THREE.Vector3()) {
 	// Portal-view mapping for a camera still inside the source side of the room.
 	// It answers: “where would this eye be if it were looking out from the
 	// room-start portal instead of standing in front of the exit portal?”
+	const tileIndex = getRoomTileIndex(sourcePosition.z);
 	const distanceFromDoorInside = THREE.MathUtils.clamp(
-		sourcePosition.z - fixedPortal.sourceZ,
+		wrapZ(sourcePosition.z) - fixedPortal.sourceZ,
 		fixedPortal.minCameraDistance,
 		fixedPortal.maxCameraDistance
 	);
 	target.set(
 		THREE.MathUtils.clamp(sourcePosition.x, -ROOM_WIDTH * 0.43, ROOM_WIDTH * 0.43),
 		THREE.MathUtils.clamp(sourcePosition.y, GROUND_Y + 0.50, ROOM_WALL_HEIGHT - 0.20),
-		fixedPortal.destinationZ - distanceFromDoorInside
+		fixedPortal.destinationZ - distanceFromDoorInside + getRoomTileOriginZ(tileIndex)
 	);
 	return target;
 }
@@ -3568,34 +3593,6 @@ function isInsideDoorAperture(position, pad = 0) {
 	return Math.abs(position.x - roomExitPos.x) <= fixedPortal.halfWidth + pad &&
 		position.y >= fixedPortal.bottomY - 0.12 &&
 		position.y <= fixedPortal.topY + 0.22;
-}
-
-function mapSameRoomPortalCrossingPosition(sourcePosition, target = new THREE.Vector3(), direction = "sourceToDestination") {
-	// Door topology mapping: preserve local doorway coordinates. A slow walk through
-	// the threshold should keep the same sideways offset, height, look direction,
-	// and through-plane residual instead of snapping to a destination center.
-	const localX = THREE.MathUtils.clamp(sourcePosition.x - roomExitPos.x, -fixedPortal.halfWidth, fixedPortal.halfWidth);
-	const localY = THREE.MathUtils.clamp(sourcePosition.y, fixedPortal.bottomY, fixedPortal.topY);
-	if (direction === "destinationToSource") {
-		const distanceThroughDoor = Math.max(fixedPortal.seamEpsilon, sourcePosition.z - fixedPortal.destinationZ);
-		target.set(roomExitPos.x + localX, localY, fixedPortal.sourceZ + distanceThroughDoor);
-	} else {
-		const distanceThroughDoor = Math.max(fixedPortal.seamEpsilon, fixedPortal.sourceZ - sourcePosition.z);
-		target.set(roomExitPos.x + localX, localY, fixedPortal.destinationZ - distanceThroughDoor);
-	}
-	return target;
-}
-
-function mapSameRoomPortalVelocity(sourceVelocity, target = new THREE.Vector3(), direction = "sourceToDestination") {
-	target.copy(sourceVelocity);
-	if (direction === "destinationToSource") {
-		if (Math.abs(target.z) < 0.35) target.z = 0.35;
-		if (target.z < 0) target.z = -target.z;
-	} else {
-		if (Math.abs(target.z) < 0.35) target.z = -0.35;
-		if (target.z > 0) target.z = -target.z;
-	}
-	return target;
 }
 
 function smoothDoorStep(t) {
@@ -3847,6 +3844,7 @@ function renderGoalSlots() {
 }
 
 function updateRoomVisuals() {
+	roomGroup.position.z = getRoomTileOriginZ(getRoomTileIndex(player.pos.z));
 	renderGoalSlots();
 	for (let i = 0; i < roomGridCells.length; i++) {
 		const cell = roomGridCells[i];
@@ -3926,10 +3924,11 @@ function clampHumanWalkTargetZ(v) {
 }
 
 function isRoomPointBlocked(x, z, radius = 0.45) {
+	const localZ = wrapZ(z);
 	for (const c of roomColliders) {
 		if (
 			x > c.minX - radius && x < c.maxX + radius &&
-			z > c.minZ - radius && z < c.maxZ + radius
+			localZ > c.minZ - radius && localZ < c.maxZ + radius
 		) return true;
 	}
 	return false;
@@ -3938,10 +3937,11 @@ function isRoomPointBlocked(x, z, radius = 0.45) {
 function getPlayerSupportY(x, z) {
 	let supportY = GROUND_Y;
 	const radius = 0.34;
+	const localZ = wrapZ(z);
 	for (const c of roomColliders) {
 		if (
 			x > c.minX - radius && x < c.maxX + radius &&
-			z > c.minZ - radius && z < c.maxZ + radius
+			localZ > c.minZ - radius && localZ < c.maxZ + radius
 		) {
 			supportY = Math.max(supportY, c.topY + GROUND_Y);
 		}
@@ -3951,23 +3951,25 @@ function getPlayerSupportY(x, z) {
 
 function resolvePlayerObstacleCollisions() {
 	const radius = 0.34;
+	const tileOriginZ = getPlayerRoomTileOriginZ();
+	let localPlayerZ = getPlayerLocalZ();
 	for (const c of roomColliders) {
 		const onTop = player.pos.y >= c.topY + GROUND_Y - 0.08;
 		if (onTop) continue;
 		if (player.pos.y < c.bottomY - 0.4 || player.pos.y > c.topY + GROUND_Y + 0.4) continue;
 		if (
 			player.pos.x > c.minX - radius && player.pos.x < c.maxX + radius &&
-			player.pos.z > c.minZ - radius && player.pos.z < c.maxZ + radius
+			localPlayerZ > c.minZ - radius && localPlayerZ < c.maxZ + radius
 		) {
 			const pushLeft = Math.abs(player.pos.x - (c.minX - radius));
 			const pushRight = Math.abs((c.maxX + radius) - player.pos.x);
-			const pushBack = Math.abs(player.pos.z - (c.minZ - radius));
-			const pushForward = Math.abs((c.maxZ + radius) - player.pos.z);
+			const pushBack = Math.abs(localPlayerZ - (c.minZ - radius));
+			const pushForward = Math.abs((c.maxZ + radius) - localPlayerZ);
 			const minPush = Math.min(pushLeft, pushRight, pushBack, pushForward);
 			if (minPush === pushLeft) { player.pos.x = c.minX - radius; if (player.vel.x > 0) player.vel.x = 0; }
 			else if (minPush === pushRight) { player.pos.x = c.maxX + radius; if (player.vel.x < 0) player.vel.x = 0; }
-			else if (minPush === pushBack) { player.pos.z = c.minZ - radius; if (player.vel.z > 0) player.vel.z = 0; }
-			else { player.pos.z = c.maxZ + radius; if (player.vel.z < 0) player.vel.z = 0; }
+			else if (minPush === pushBack) { localPlayerZ = c.minZ - radius; player.pos.z = tileOriginZ + localPlayerZ; if (player.vel.z > 0) player.vel.z = 0; }
+			else { localPlayerZ = c.maxZ + radius; player.pos.z = tileOriginZ + localPlayerZ; if (player.vel.z < 0) player.vel.z = 0; }
 		}
 	}
 }
@@ -4018,19 +4020,20 @@ function getPlayerWallContact() {
 	const maxX = ROOM_WIDTH / 2 - 1.1;
 	const minZ = -ROOM_DEPTH / 2 + 0.8;
 	const maxZ = ROOM_DEPTH / 2 - 0.72;
+	const localPlayerZ = getPlayerLocalZ();
 	if (player.pos.x <= minX + climbGap) return { x: 1, z: 0, topY: getPlayerCeilingLimit() };
 	if (player.pos.x >= maxX - climbGap) return { x: -1, z: 0, topY: getPlayerCeilingLimit() };
-	if (player.pos.z <= minZ + climbGap) return { x: 0, z: 1, topY: getPlayerCeilingLimit() };
-	if (player.pos.z >= maxZ - climbGap) return { x: 0, z: -1, topY: getPlayerCeilingLimit() };
+	if (localPlayerZ <= minZ + climbGap) return { x: 0, z: 1, topY: getPlayerCeilingLimit() };
+	if (localPlayerZ >= maxZ - climbGap) return { x: 0, z: -1, topY: getPlayerCeilingLimit() };
 
 	for (const c of roomColliders) {
 		if (player.pos.y < c.bottomY - 0.2 || player.pos.y > c.topY + 1.1) continue;
-		const inZ = player.pos.z > c.minZ - radius && player.pos.z < c.maxZ + radius;
+		const inZ = localPlayerZ > c.minZ - radius && localPlayerZ < c.maxZ + radius;
 		const inX = player.pos.x > c.minX - radius && player.pos.x < c.maxX + radius;
 		if (inZ && Math.abs(player.pos.x - (c.minX - radius)) < climbGap + 0.05) return { x: -1, z: 0, topY: c.topY };
 		if (inZ && Math.abs(player.pos.x - (c.maxX + radius)) < climbGap + 0.05) return { x: 1, z: 0, topY: c.topY };
-		if (inX && Math.abs(player.pos.z - (c.minZ - radius)) < climbGap + 0.05) return { x: 0, z: -1, topY: c.topY };
-		if (inX && Math.abs(player.pos.z - (c.maxZ + radius)) < climbGap + 0.05) return { x: 0, z: 1, topY: c.topY };
+		if (inX && Math.abs(localPlayerZ - (c.minZ - radius)) < climbGap + 0.05) return { x: 0, z: -1, topY: c.topY };
+		if (inX && Math.abs(localPlayerZ - (c.maxZ + radius)) < climbGap + 0.05) return { x: 0, z: 1, topY: c.topY };
 	}
 	return null;
 }
@@ -4059,9 +4062,9 @@ function depositShotSoulToRoom(slot) {
 	const fillIndex = room.depositedSouls;
 	room.depositedSouls = Math.min(room.requiredSouls, room.depositedSouls + 1);
 	phoneStorage.lastDischargePulseTime = pulseTime();
-	spawnParticleBurst(targetData[idx + T_X], targetData[idx + T_Y], targetData[idx + T_Z]);
+	spawnRoomParticleBurst(targetData[idx + T_X], targetData[idx + T_Y], targetData[idx + T_Z]);
 	const filledCell = roomGridCells[fillIndex];
-	spawnParticleBurst(filledCell ? filledCell.x : roomDepositPos.x, filledCell ? filledCell.y : roomDepositPos.y, filledCell ? filledCell.z : roomDepositPos.z);
+	spawnRoomParticleBurst(filledCell ? filledCell.x : roomDepositPos.x, filledCell ? filledCell.y : roomDepositPos.y, filledCell ? filledCell.z : roomDepositPos.z);
 	playCaptureSlotSound(fillIndex);
 	soulDepositShot[slot] = 0;
 	clearTargetSlot(slot);
@@ -4125,7 +4128,7 @@ function damageHumansAlongDepositShot(projectileSlot, prevX, prevY, prevZ) {
 		targetData[hidx + T_VY] = Math.max(targetData[hidx + T_VY], 1.0);
 		targetData[hidx + T_VZ] += targetData[pidx + T_VZ] * 0.08;
 		spawnFlameBurst(hx, hy, hz, 0.55);
-		spawnParticleBurst(cx, cy, cz);
+		spawnRoomParticleBurst(cx, cy, cz);
 		return true;
 	}
 	return false;
@@ -4215,9 +4218,8 @@ function resolveDoorCrossingAction(mode, direction = "sourceToDestination") {
 	captureDoorCrossingState(mode, direction);
 	if (mode === "advance") {
 		enterNextRoomThroughPortal(direction);
-	} else {
-		loopPlayerThroughClosedDoor(direction);
 	}
+	doorCrossingState.active = false;
 }
 
 function finishDoorCrossing() {
@@ -4231,18 +4233,15 @@ function updateDoorCrossingState(dt) {
 }
 
 function applyPortalBodyHandoff(targetRoomAdvanced = false) {
-	// Portal-body remapping is disabled in the simple-door build.
-	// Keep this function as a compatibility stub for older call sites.
-	if (!targetRoomAdvanced) loopPlayerThroughClosedDoor();
+	// Compatibility no-op: wrapped-space continuity no longer remaps player/camera.
 }
 
 /* Shared room teardown/rebuild called by both enterNextRoomThroughPortal and resetRunState. */
-function resetRoomInventory(doorLoopCooldown = 0) {
+function resetRoomInventory() {
 	room.requiredSouls = ROOM_REQUIRED_SOULS;
 	room.depositedSouls = 0;
 	room.doorOpen = false;
 	room.depositCooldown = 0;
-	room.doorLoopCooldown = doorLoopCooldown;
 	phoneStorage.storedCubes.length = 0;
 	if (phoneStorage.cubeProjectiles) phoneStorage.cubeProjectiles.length = 0;
 	pendingDischargedSouls.length = 0;
@@ -4255,42 +4254,15 @@ function resetRoomInventory(doorLoopCooldown = 0) {
 }
 
 function enterNextRoomThroughPortal(direction = "sourceToDestination") {
-	// Open-door contract: advancing rooms should still feel like walking through the
-	// same doorway, so preserve seam-relative body state before rebuilding room data.
-	mapSameRoomPortalCrossingPosition(player.pos, portalMappedPlayerPosition, direction);
-	mapSameRoomPortalVelocity(player.vel, portalMappedVelocity, direction);
-	portalCrossingCameraDelta.subVectors(portalMappedPlayerPosition, player.pos);
+	// Open-door contract in wrapped space: keep continuous player/camera state and
+	// only advance room content ownership.
 	room.index++;
 	room.seed = Math.floor(Math.random() * 1000000) + room.index * 9973;
-	resetRoomInventory(0.45);
-	player.pos.copy(portalMappedPlayerPosition);
-	player.vel.copy(portalMappedVelocity);
-	player.jumpVel = player.vel.y;
-	camera.position.add(portalCrossingCameraDelta);
-	room.lastDoorCheckZ = player.pos.z;
-	room.doorLoopCooldown = 0.035;
+	resetRoomInventory();
 	doorCrossingState.active = false;
 	portalCameraCompression.value = 0;
 	portalCameraCompression.target = 0;
 	gainBattery(18, "NEXT ROOM");
-}
-
-function loopPlayerThroughClosedDoor(direction = "sourceToDestination") {
-	// Locked-door contract: the room does not reset and the room index does not
-	// change. Only the player body crosses the door topology; the camera remains a
-	// normal follower and the door window remains visual-only.
-	mapSameRoomPortalCrossingPosition(player.pos, portalMappedPlayerPosition, direction);
-	mapSameRoomPortalVelocity(player.vel, portalMappedVelocity, direction);
-	portalCrossingCameraDelta.subVectors(portalMappedPlayerPosition, player.pos);
-	player.pos.copy(portalMappedPlayerPosition);
-	player.vel.copy(portalMappedVelocity);
-	player.jumpVel = player.vel.y;
-	camera.position.add(portalCrossingCameraDelta);
-	room.lastDoorCheckZ = player.pos.z;
-	room.doorLoopCooldown = 0.035;
-	doorCrossingState.active = false;
-	portalCameraCompression.value = 0;
-	portalCameraCompression.target = 0;
 }
 
 
@@ -4303,45 +4275,35 @@ window.portalDoorDebug = function portalDoorDebug() {
 		requiredSouls: room.requiredSouls,
 		sourceZ: fixedPortal.sourceZ,
 		destinationZ: fixedPortal.destinationZ,
-		lastDoorCheckZ: room.lastDoorCheckZ,
 		preClampCrossing: true,
 		doorLikeSeam: true,
 		openingOnlyDoor: true,
 		aperture: { halfWidth: fixedPortal.halfWidth, bottomY: fixedPortal.bottomY, topY: fixedPortal.topY, epsilon: fixedPortal.seamEpsilon },
 		player: { x: player.pos.x, y: player.pos.y, z: player.pos.z },
 		velocity: { x: player.vel.x, y: player.vel.y, z: player.vel.z },
-		cooldown: room.doorLoopCooldown
+		tileIndex: getRoomTileIndex(player.pos.z)
 	};
 };
 
-function tryResolveDoorCrossing() {
-	// Continuous wrapped-space owner. No crossing event, no cooldown gate.
+function tryResolveDoorCrossing(previousPlayerZ = player.pos.z) {
+	// Continuous wrapped-space owner: no teleport/remap for closed-door looping.
+	const previousTile = getRoomTileIndex(previousPlayerZ);
+	const currentTile = getRoomTileIndex(player.pos.z);
+	roomTopology.currentTileIndex = currentTile;
+	if (previousTile === currentTile) return false;
 	const withinDoorWidth = Math.abs(player.pos.x - roomExitPos.x) < fixedPortal.halfWidth;
 	const withinDoorAperture = withinDoorWidth && isInsideDoorAperture(player.pos, 0.04);
 	if (!withinDoorAperture) return false;
-	if (!room.doorOpen) {
-		const crossedSourcePlane = room.lastDoorCheckZ > fixedPortal.sourceZ && player.pos.z <= fixedPortal.sourceZ;
-		if (crossedSourcePlane) {
-			resolveDoorCrossingAction('loop', 'sourceToDestination');
-			return true;
-		}
-		const crossedDestinationPlane = room.lastDoorCheckZ < fixedPortal.destinationZ && player.pos.z >= fixedPortal.destinationZ;
-		if (crossedDestinationPlane) {
-			resolveDoorCrossingAction('loop', 'destinationToSource');
-			return true;
-		}
-	} else {
-		const crossedSourcePlane = room.lastDoorCheckZ > fixedPortal.sourceZ && player.pos.z <= fixedPortal.sourceZ;
-		if (crossedSourcePlane) { resolveDoorCrossingAction('advance','sourceToDestination'); return true; }
+	if (room.doorOpen && currentTile < previousTile) {
+		resolveDoorCrossingAction("advance", "sourceToDestination");
+		return true;
 	}
 	return false;
 }
 
 function updateRoomLoop(dt) {
 	room.depositCooldown = Math.max(0, room.depositCooldown - dt);
-	room.doorLoopCooldown = Math.max(0, room.doorLoopCooldown - dt);
-	tryResolveDoorCrossing();
-	room.lastDoorCheckZ = player.pos.z;
+	roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
 	updateRoomVisuals();
 }
 
@@ -4722,7 +4684,7 @@ function isDropPositionClear(x, z, sourceX, sourceZ) {
 }
 
 function resolveSeparatedDropPosition(x, z) {
-	const baseAngle = Math.atan2(z - player.pos.z, x - player.pos.x);
+	const baseAngle = Math.atan2(z - getPlayerLocalZ(), x - player.pos.x);
 	const offsets = [0, 0.72, -0.72, 1.45, -1.45, Math.PI];
 	for (let i = 0; i < offsets.length; i++) {
 		const angle = baseAngle + offsets[i];
@@ -4761,11 +4723,14 @@ function clearFlowerPowerups() {
 }
 
 function updateFlowerPowerups(dt) {
+	const tileOriginZ = getPlayerRoomTileOriginZ();
+	const playerLocalZ = getPlayerLocalZ();
 	for (let i = flowerPowerups.length - 1; i >= 0; i--) {
 		const powerup = flowerPowerups[i];
 		powerup.age += dt;
 		if (powerup.mesh) {
 			powerup.mesh.position.y = powerup.y + Math.sin(powerup.age * 3.2) * FLOWER_BOB_HEIGHT;
+			powerup.mesh.position.z = powerup.z + tileOriginZ;
 			powerup.mesh.rotation.y += dt * 1.35;
 		}
 		if (powerup.continuationMeshes) {
@@ -4773,16 +4738,16 @@ function updateFlowerPowerups(dt) {
 				const continuationMesh = powerup.continuationMeshes[c];
 				if (!continuationMesh) continue;
 				continuationMesh.visible = true;
-				continuationMesh.position.set(powerup.x, powerup.mesh ? powerup.mesh.position.y : powerup.y, powerup.z + ROOM_CONTINUATION_OFFSETS[c]);
+				continuationMesh.position.set(powerup.x, powerup.mesh ? powerup.mesh.position.y : powerup.y, powerup.z + tileOriginZ + ROOM_CONTINUATION_OFFSETS[c]);
 				continuationMesh.rotation.y = powerup.mesh ? powerup.mesh.rotation.y : continuationMesh.rotation.y;
 			}
 		}
 		const dx = powerup.x - player.pos.x;
-		const dz = powerup.z - player.pos.z;
+		const dz = powerup.z - playerLocalZ;
 		const dy = (powerup.mesh ? powerup.mesh.position.y : powerup.y) - player.pos.y;
 		if (dx * dx + dz * dz + dy * dy <= FLOWER_PICKUP_RADIUS * FLOWER_PICKUP_RADIUS) {
 			addPowerupStack(powerup.type || "flower", powerup.value);
-			spawnParticleBurst(powerup.x, powerup.y + 0.2, powerup.z);
+			spawnParticleBurst(powerup.x, powerup.y + 0.2, powerup.z + tileOriginZ);
 			releaseFlowerPowerupMesh(powerup.mesh);
 			if (powerup.continuationMeshes) {
 				for (const mesh of powerup.continuationMeshes) releaseFlowerPowerupMirrorMesh(mesh);
@@ -5336,10 +5301,11 @@ function getScreenLatchPoint(out, worldPoint) {
 }
 
 function keepSoulCoreOutsidePhoneSolid(idx, preferScreenFront = false) {
+	const tileOriginZ = getPlayerRoomTileOriginZ();
 	phoneSolidWorld.set(
 		targetData[idx + T_X],
 		targetData[idx + T_Y],
-		targetData[idx + T_Z]
+		targetData[idx + T_Z] + tileOriginZ
 	);
 	phone.worldToLocal(phoneSolidLocal.copy(phoneSolidWorld));
 
@@ -5373,7 +5339,7 @@ function keepSoulCoreOutsidePhoneSolid(idx, preferScreenFront = false) {
 	phone.localToWorld(phoneSolidWorld.copy(phoneSolidLocal));
 	targetData[idx + T_X] = phoneSolidWorld.x;
 	targetData[idx + T_Y] = phoneSolidWorld.y;
-	targetData[idx + T_Z] = phoneSolidWorld.z;
+	targetData[idx + T_Z] = phoneSolidWorld.z - tileOriginZ;
 	targetData[idx + T_VX] = 0;
 	targetData[idx + T_VY] = 0;
 	targetData[idx + T_VZ] = 0;
@@ -5403,7 +5369,7 @@ function markSoulSlurpable(i, idx) {
 	const px = targetData[idx + T_X];
 	const py = targetData[idx + T_RENDER_Y] || targetData[idx + T_Y];
 	const pz = targetData[idx + T_Z];
-	spawnParticleBurst(px, py, pz);
+	spawnRoomParticleBurst(px, py, pz);
 	if (wasBrute && Math.random() < FLOWER_DROP_CHANCE) spawnFlowerPowerup(px, HUMAN_VISUAL_FOOT_Y + 0.42, pz);
 }
 
@@ -5425,12 +5391,12 @@ function damageSoulShell(i, amount, hitX, hitY, hitZ) {
 	}
 
 	const awayX = targetData[idx + T_X] - player.pos.x;
-	const awayZ = targetData[idx + T_Z] - player.pos.z;
+	const awayZ = targetData[idx + T_Z] - getPlayerLocalZ();
 	const awayLen = Math.max(Math.hypot(awayX, awayZ), 0.001);
 	targetData[idx + T_VX] += (awayX / awayLen) * 2.4;
 	targetData[idx + T_VY] = Math.max(targetData[idx + T_VY], 1.2);
 	targetData[idx + T_VZ] += (awayZ / awayLen) * 2.4;
-	spawnParticleBurst(hitX, hitY, hitZ);
+	spawnRoomParticleBurst(hitX, hitY, hitZ);
 	feedSupplementalBattery(FLOWER_ATTACK_FEED, "ATTACK");
 	return true;
 }
@@ -5510,6 +5476,7 @@ function spawnChainLineEffect(hitPoints) {
 }
 
 function applyProximityAttackHits() {
+	const playerLocalZ = getPlayerLocalZ();
 	let didHit = false;
 	let hitCount = 0;
 	const hitPoints = [];
@@ -5521,7 +5488,7 @@ function applyProximityAttackHits() {
 		if (isSoulUnavailable(i)) continue;
 
 		const dx = targetData[idx + T_X] - player.pos.x;
-		const dz = targetData[idx + T_Z] - player.pos.z;
+		const dz = targetData[idx + T_Z] - playerLocalZ;
 		const forwardDist = dx * proximityAttackDir.x + dz * proximityAttackDir.z;
 		const chainRangeBonus = batteryComboActive() ? Math.min(0.75, battery.comboHits * 0.025) : 0;
 		if (forwardDist < -0.35 || forwardDist > (combo.range ?? PROX_ATTACK_RANGE) + chainRangeBonus) continue;
@@ -5626,6 +5593,7 @@ function processQueuedSoulCaptures() {
 }
 
 function releaseSoulFromScreen(i, idx) {
+	const tileOriginZ = getPlayerRoomTileOriginZ();
 	const phase = THREE.MathUtils.clamp(targetIngestProgress[i], 0, 1);
 	if (phase >= SOUL_CAPTURE_COMMIT_PHASE) {
 		queueSoulCapture(
@@ -5637,10 +5605,11 @@ function releaseSoulFromScreen(i, idx) {
 		);
 		return;
 	}
+	const worldZ = targetData[idx + T_Z] + tileOriginZ;
 	soulPoint.set(
 		targetData[idx + T_X],
 		targetData[idx + T_RENDER_Y] || targetData[idx + T_Y],
-		targetData[idx + T_Z]
+		worldZ
 	);
 	soulRecoilDir.copy(soulPoint).sub(vacuumPullPoint);
 	if (soulRecoilDir.lengthSq() < 0.001) {
@@ -5868,6 +5837,7 @@ function applyHumanAttackHit(i, dx, dz, dist) {
 }
 
 function updateHumanWalking(dt) {
+	const playerLocalZ = getPlayerLocalZ();
 	for (let i = 0; i < TARGET_COUNT; i++) {
 		if (!canHumanWalk(i)) continue;
 		const idx = targetIndex(i);
@@ -5877,7 +5847,7 @@ function updateHumanWalking(dt) {
 		let x = targetData[idx + T_X];
 		let z = targetData[idx + T_Z];
 		let toPlayerX = player.pos.x - x;
-		let toPlayerZ = player.pos.z - z;
+		let toPlayerZ = playerLocalZ - z;
 		let playerDist = Math.hypot(toPlayerX, toPlayerZ);
 		if (playerDist > 0.001 && playerDist < HUMAN_ATTACK_NOTICE_RANGE) {
 			targetData[idx + T_WALK_YAW] = Math.atan2(-toPlayerX / playerDist, -toPlayerZ / playerDist);
@@ -5969,12 +5939,13 @@ function clearTargetSlot(i) {
 }
 
 function chooseHumanSpawnPoint(i, avoidPoint = null) {
+	const playerLocalZ = getPlayerLocalZ();
 	let best = null;
 	let bestScore = -Infinity;
 	for (let tries = 0; tries < 32; tries++) {
 		const candidate = randomRoomSpawnPoint(i + tries * 17 + room.index * 31);
 		const dxPlayer = candidate.x - player.pos.x;
-		const dzPlayer = candidate.z - player.pos.z;
+		const dzPlayer = candidate.z - playerLocalZ;
 		const playerDistSq = dxPlayer * dxPlayer + dzPlayer * dzPlayer;
 		let oldDistSq = Infinity;
 		if (avoidPoint) {
@@ -6276,6 +6247,10 @@ function spawnParticleBurst(x, y, z) {
 	}
 }
 
+function spawnRoomParticleBurst(x, y, localZ) {
+	spawnParticleBurst(x, y, localZ + getPlayerRoomTileOriginZ());
+}
+
 function updateProximityAttackVisuals(dt) {
 	if (proximityAttack.visualTimer <= 0) {
 		proximitySlashMesh.visible = false;
@@ -6372,6 +6347,8 @@ const flatToTarget = new THREE.Vector3();
 const AIM_CONE_DOT = 0.72;
 
 function rayHitsTarget(origin, direction) {
+	const tileOriginZ = getPlayerRoomTileOriginZ();
+	const playerLocalZ = getPlayerLocalZ();
 	let bestIndex = -1;
 	let bestDistance = Infinity;
 	const ray = new THREE.Ray(origin, direction);
@@ -6385,7 +6362,7 @@ function rayHitsTarget(origin, direction) {
 		hitCenter.set(
 			targetData[idx + T_X],
 			targetData[idx + T_RENDER_Y],
-			targetData[idx + T_Z]
+			targetData[idx + T_Z] + tileOriginZ
 		);
 		toTarget.copy(hitCenter).sub(origin);
 		const cameraForwardDistance = toTarget.dot(direction);
@@ -6393,7 +6370,7 @@ function rayHitsTarget(origin, direction) {
 		flatToTarget.set(
 			targetData[idx + T_X] - player.pos.x,
 			0,
-			targetData[idx + T_Z] - player.pos.z
+			targetData[idx + T_Z] - playerLocalZ
 		).normalize();
 		const facingDot = flatToTarget.dot(characterForward);
 		if (facingDot < AIM_CONE_DOT) continue;
@@ -6409,6 +6386,7 @@ function rayHitsTarget(origin, direction) {
 
 function updateVacuum(dt) {
 	const time = frame.time;
+	const tileOriginZ = getPlayerRoomTileOriginZ();
 	proximityAttack.cooldown = Math.max(0, proximityAttack.cooldown - dt);
 	if (frame.now - proximityAttack.lastTriggerTime > PROX_ATTACK_COMBO_WINDOW) {
 		proximityAttack.comboIndex = 0;
@@ -6459,11 +6437,12 @@ function updateVacuum(dt) {
 			const x = targetData[idx + T_X];
 			const y = targetData[idx + T_Y];
 			const z = targetData[idx + T_Z];
-			if (!isSoulInAttractionOffer(x, y, z)) continue;
-			soulPoint.set(x, y, z);
+			const worldZ = z + tileOriginZ;
+			if (!isSoulInAttractionOffer(x, y, worldZ)) continue;
+			soulPoint.set(x, y, worldZ);
 			soulToScreen.copy(vacuumPullPoint).sub(soulPoint);
 			const distanceToScreen = soulToScreen.length();
-			const cylinderBonus = isSoulInsideScreenCaptureCylinder(x, y, z) ? -3.5 : 0;
+			const cylinderBonus = isSoulInsideScreenCaptureCylinder(x, y, worldZ) ? -3.5 : 0;
 			const score = distanceToScreen + cylinderBonus;
 			if (score < offeredFreeScore) {
 				offeredFreeScore = score;
@@ -6479,10 +6458,11 @@ function updateVacuum(dt) {
 		const x = targetData[idx + T_X];
 		const y = targetData[idx + T_Y];
 		const z = targetData[idx + T_Z];
-		soulPoint.set(x, y, z);
+		const worldZ = z + tileOriginZ;
+		soulPoint.set(x, y, worldZ);
 		soulToScreen.copy(vacuumPullPoint).sub(soulPoint);
 		const distanceToScreen = Math.max(soulToScreen.length(), 0.001);
-		const insideCylinder = isSoulInsideScreenCaptureCylinder(x, y, z);
+		const insideCylinder = isSoulInsideScreenCaptureCylinder(x, y, worldZ);
 		const slurpable = isTargetSlurpable(idx);
 		const offered = !soulDepositShot[i] && attractionActive && (
 			soulState[i] === SOUL_LATCHED ||
@@ -6519,7 +6499,7 @@ function updateVacuum(dt) {
 			}
 			if (isDepositShot) {
 				const hitHuman = damageHumansAlongDepositShot(i, prevX, prevY, prevZ);
-				if (Math.random() < 0.22) spawnParticleBurst(targetData[idx + T_X], targetData[idx + T_Y], targetData[idx + T_Z]);
+				if (Math.random() < 0.22) spawnRoomParticleBurst(targetData[idx + T_X], targetData[idx + T_Y], targetData[idx + T_Z]);
 				if (hitHuman) {
 					soulDepositShot[i] = 0;
 					clearTargetSlot(i);
@@ -6540,7 +6520,7 @@ function updateVacuum(dt) {
 				: (targetData[idx + T_Y] < -10 || Math.abs(targetData[idx + T_X]) > ROOM_WIDTH * 0.9 || Math.abs(targetData[idx + T_Z]) > ROOM_DEPTH * 0.9);
 			if (outOfBounds || soulRecoilTime[i] <= 0) {
 				if (isDepositShot) {
-					spawnParticleBurst(targetData[idx + T_X], targetData[idx + T_Y], targetData[idx + T_Z]);
+					spawnRoomParticleBurst(targetData[idx + T_X], targetData[idx + T_Y], targetData[idx + T_Z]);
 					soulDepositShot[i] = 0;
 					clearTargetSlot(i);
 				} else {
@@ -6918,7 +6898,7 @@ function placePlayerAtRoomStart() {
 	player.coyoteTimer = PARKOUR.coyoteTime;
 	player.jumpBufferTimer = 0;
 	player.airJumpsRemaining = phoneCharacter.jump.airJumps;
-	room.lastDoorCheckZ = ROOM_START_Z;
+	roomTopology.currentTileIndex = getRoomTileIndex(player.pos.z);
 }
 
 function resetRunState() {
@@ -6944,11 +6924,10 @@ function resetRunState() {
 	resetBatteryCombo();
 	room.index = 1;
 	room.seed = 12345;
-	room.lastDoorCheckZ = ROOM_START_Z;
 	vacuum.active = false;
 	vacuum.power = 0;
 	setMode("vacuum");
-	resetRoomInventory(0);
+	resetRoomInventory();
 	updateRoomVisuals();
 	updateBatteryHud();
 }
@@ -7119,9 +7098,16 @@ function constrainThirdPersonCamera(desired, lookBase) {
 	cameraCollisionStart.copy(lookBase);
 	cameraCollisionStart.y += 0.58;
 	cameraCollisionEnd.copy(desired);
+	const tileOriginZ = getRoomTileOriginZ(getRoomTileIndex(lookBase.z));
+	const localStartZ = wrapZ(cameraCollisionStart.z);
+	const localEndZ = wrapZ(cameraCollisionEnd.z);
 	let nearestT = 1;
 	for (const c of roomColliders) {
-		const t = getSegmentAabbHitT(cameraCollisionStart, cameraCollisionEnd, c);
+		const t = getSegmentAabbHitT(
+			{ x: cameraCollisionStart.x, y: cameraCollisionStart.y, z: localStartZ },
+			{ x: cameraCollisionEnd.x, y: cameraCollisionEnd.y, z: localEndZ },
+			c
+		);
 		if (t !== null && t < nearestT) nearestT = t;
 	}
 	const doorX0 = -fixedPortal.halfWidth;
@@ -7141,7 +7127,12 @@ function constrainThirdPersonCamera(desired, lookBase) {
 		{ minX: doorX0, maxX: doorX1, bottomY: fixedPortal.topY, topY: ROOM_WALL_HEIGHT, minZ: ROOM_DEPTH / 2 - 0.5, maxZ: ROOM_DEPTH / 2 + wallPad }
 	];
 	for (const c of roomBounds) {
-		const t = getSegmentAabbHitT(cameraCollisionStart, cameraCollisionEnd, c, CAMERA_COLLISION_RADIUS * 0.8);
+		const t = getSegmentAabbHitT(
+			{ x: cameraCollisionStart.x, y: cameraCollisionStart.y, z: localStartZ },
+			{ x: cameraCollisionEnd.x, y: cameraCollisionEnd.y, z: localEndZ },
+			c,
+			CAMERA_COLLISION_RADIUS * 0.8
+		);
 		if (t !== null && t < nearestT) nearestT = t;
 	}
 	if (nearestT < 1) {
@@ -7151,7 +7142,7 @@ function constrainThirdPersonCamera(desired, lookBase) {
 		desired.copy(cameraCollisionStart).addScaledVector(cameraCollisionTmp, safeT);
 	}
 	desired.x = THREE.MathUtils.clamp(desired.x, -ROOM_WIDTH / 2 + CAMERA_COLLISION_RADIUS, ROOM_WIDTH / 2 - CAMERA_COLLISION_RADIUS);
-	desired.z = THREE.MathUtils.clamp(desired.z, -ROOM_DEPTH / 2 + CAMERA_COLLISION_RADIUS, ROOM_DEPTH / 2 - CAMERA_COLLISION_RADIUS);
+	desired.z = tileOriginZ + THREE.MathUtils.clamp(wrapZ(desired.z), -ROOM_DEPTH / 2 + CAMERA_COLLISION_RADIUS, ROOM_DEPTH / 2 - CAMERA_COLLISION_RADIUS);
 	desired.y = THREE.MathUtils.clamp(desired.y, GROUND_Y + 0.65, ROOM_WALL_HEIGHT - 0.45);
 }
 
@@ -7163,6 +7154,7 @@ function updateMovement(dt) {
 }
 
 function updatePlayerPhysics(dt) {
+	const previousPlayerZ = player.pos.z;
 	if (player.jumpBufferTimer > 0) player.jumpBufferTimer = Math.max(0, player.jumpBufferTimer - dt);
 	if (player.grounded) player.coyoteTimer = PARKOUR.coyoteTime;
 	else player.coyoteTimer = Math.max(0, player.coyoteTimer - dt);
@@ -7209,7 +7201,7 @@ function updatePlayerPhysics(dt) {
 	if (player.grounded && player.jumpBufferTimer > 0) startGroundJump();
 	player.pos.addScaledVector(player.vel, dt);
 	resolvePlayerObstacleCollisions();
-	const crossedPortalDuringMove = tryResolveDoorCrossing();
+	const crossedPortalDuringMove = tryResolveDoorCrossing(previousPlayerZ);
 	clampPlayerToRoomHeight();
 	const supportYAfterMove = getPlayerSupportY(player.pos.x, player.pos.z);
 	if (player.grounded) {
@@ -7227,8 +7219,6 @@ function updatePlayerPhysics(dt) {
 	}
 	const minX = -ROOM_WIDTH / 2 + 1.1;
 	const maxX = ROOM_WIDTH / 2 - 1.1;
-	const minZ = -ROOM_DEPTH / 2 + 0.8;
-	const maxZ = ROOM_DEPTH / 2 - 0.72;
 	if (player.pos.x < minX) {
 		player.pos.x = minX;
 		if (player.vel.x < 0) player.vel.x = 0;
@@ -7237,15 +7227,6 @@ function updatePlayerPhysics(dt) {
 		player.pos.x = maxX;
 		if (player.vel.x > 0) player.vel.x = 0;
 		player.vel.z *= PARKOUR.wallSlideRetention;
-	}
-	if (player.pos.z < minZ) {
-		player.pos.z = minZ;
-		if (player.vel.z < 0) player.vel.z = 0;
-		player.vel.x *= PARKOUR.wallSlideRetention;
-	} else if (player.pos.z > maxZ) {
-		player.pos.z = maxZ;
-		if (player.vel.z > 0) player.vel.z = 0;
-		player.vel.x *= PARKOUR.wallSlideRetention;
 	}
 	const friction = player.grounded ? phoneCharacter.movement.friction : PARKOUR.airFriction;
 	player.vel.multiplyScalar(Math.pow(friction, dt * 60));
@@ -7424,6 +7405,7 @@ function updatePhoneVisualPose(dt) {
 
 function updateTargets() {
 	const time = frame.time;
+	const tileOriginZ = getPlayerRoomTileOriginZ();
 	let nodeInstance = 0;
 	let rodInstance = 0;
 	updateScreenPlaneBasis();
@@ -7440,6 +7422,7 @@ function updateTargets() {
 		const x = targetData[idx + T_X];
 		const baseY = targetData[idx + T_Y];
 		const z = targetData[idx + T_Z];
+		const worldZ = z + tileOriginZ;
 		const floatOffset = targetData[idx + T_FLOAT];
 		const spinSpeed = targetData[idx + T_SPIN];
 		const scale = targetData[idx + T_SCALE];
@@ -7533,7 +7516,7 @@ function updateTargets() {
 		const livingScale = humanVisible ? scale * (1 - humanStress * 0.25) * Math.max(0, morphShrink) : 0;
 		const sprite = humanSprites[i];
 		if (humanVisible) {
-			const modelVisible = updateHumanModelInstance(i, true, x, z, targetData[idx + T_WALK_YAW], livingScale, frame.dt, humanAlive ? targetData[idx + T_ATTACK_TIMER] : 0, targetData[idx + T_ATTACK_VARIANT]);
+			const modelVisible = updateHumanModelInstance(i, true, x, worldZ, targetData[idx + T_WALK_YAW], livingScale, frame.dt, humanAlive ? targetData[idx + T_ATTACK_TIMER] : 0, targetData[idx + T_ATTACK_VARIANT]);
 			if (modelVisible) {
 				sprite.visible = false;
 			} else {
@@ -7546,17 +7529,17 @@ function updateTargets() {
 					if (Math.abs(screenMotion) > 0.01) targetData[idx + T_WALK_FACE] = screenMotion >= 0 ? 1 : -1;
 				}
 				const faceSign = targetData[idx + T_WALK_FACE] || 1;
-				sprite.position.set(x, HUMAN_GROUND_Y + 0.55 * scale, z);
+				sprite.position.set(x, HUMAN_GROUND_Y + 0.55 * scale, worldZ);
 				sprite.scale.set(0.82 * livingScale * faceSign, 1.18 * livingScale, 1);
 				sprite.visible = true;
 			}
 		} else {
-			updateHumanModelInstance(i, false, x, z, targetData[idx + T_WALK_YAW], 0, frame.dt);
+			updateHumanModelInstance(i, false, x, worldZ, targetData[idx + T_WALK_YAW], 0, frame.dt);
 			sprite.visible = false;
 		}
 		const humanScale = 0;
 
-		springNetCenter.set(x, y, z);
+		springNetCenter.set(x, y, worldZ);
 		springNetPullDir.set(
 			vacuumPullPoint.x - x,
 			vacuumPullPoint.y - y,
@@ -7618,7 +7601,7 @@ function updateTargets() {
 				setContinuationHumanMirror(
 					continuationInstance,
 					x,
-					z + offsetZ,
+					worldZ + offsetZ,
 					targetData[idx + T_WALK_YAW],
 					livingScale,
 					walkPhase
@@ -8077,7 +8060,7 @@ function updateRuntimeDiagnostics(dt) {
 		`PLAYER   x=${player.pos.x.toFixed(2)} y=${player.pos.y.toFixed(2)} z=${player.pos.z.toFixed(2)} v=${player.vel.length().toFixed(2)}`,
 		`BATTERY  main=${battery.value.toFixed(1)} supplemental=${supplementalBattery.value.toFixed(1)} stacks=${activePowerupStacks.flower || 0}`,
 		`SOULS    stored=${stored} pendingShots=${pendingDischargedSouls.length} flowers=${flowerPowerups.length} flowerPool=${flowerPowerupPool.length}`,
-		`DOOR     crossing=${doorCrossingState.active ? doorCrossingState.mode : "idle"} dir=${doorCrossingState.direction} cooldown=${room.doorLoopCooldown.toFixed(2)}`,
+		`DOOR     crossing=${doorCrossingState.active ? doorCrossingState.mode : "idle"} dir=${doorCrossingState.direction} tile=${getRoomTileIndex(player.pos.z)}`,
 		`GRAPHICS preset=${graphicsSettings.preset} legacy=${isLegacyGraphicsMode() ? "yes" : "no"} scale=${Math.round(graphicsSettings.renderScale * 100)}% portalWindow=${portalWindowRuntimeEnabled() ? "on" : "off"} particles=${particlesRuntimeEnabled() ? "on" : "off"}`,
 		`FPS      ${graphicsFpsState.value}`
 	];
