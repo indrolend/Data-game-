@@ -2300,7 +2300,7 @@ function portalWindowRuntimeEnabled() {
 function applyPortalWindowMaterialContract(plane) {
 	if (!plane || !plane.material) return;
 	const enabled = portalWindowRuntimeEnabled();
-	plane.material.map = enabled ? mirrorRenderTarget.texture : null;
+	plane.material.map = null;
 	plane.material.color.setHex(enabled ? 0xffffff : 0x0d1820);
 	plane.material.transparent = true;
 	plane.material.opacity = enabled ? 1.0 : 0.42;
@@ -3467,11 +3467,6 @@ let roomEntranceMirrorFrame = null;
 let roomFloorMesh = null;
 const roomContinuationGridCells = ROOM_CONTINUATION_TILE_OFFSETS.map(() => []);
 const roomContinuationGridSoulCubes = ROOM_CONTINUATION_TILE_OFFSETS.map(() => []);
-const mirrorRenderTarget = new THREE.WebGLRenderTarget(1024, 1024, { depthBuffer: true, stencilBuffer: false });
-mirrorRenderTarget.texture.colorSpace = THREE.SRGBColorSpace;
-mirrorRenderTarget.texture.generateMipmaps = false;
-mirrorRenderTarget.texture.minFilter = THREE.LinearFilter;
-mirrorRenderTarget.texture.magFilter = THREE.LinearFilter;
 
 function getRuntimeResourceSnapshot() {
 	return {
@@ -3609,7 +3604,7 @@ function clearThreeGroup(group, options = {}) {
 
 function clearRoomEnvironment() {
 	for (const tileGroup of visibleRoomTileGroups) {
-		clearThreeGroup(tileGroup, { preservedTextures: new Set([mirrorRenderTarget.texture]) });
+		clearThreeGroup(tileGroup);
 	}
 	roomGridCells.length = 0;
 	roomGridSoulCubes.length = 0;
@@ -3666,7 +3661,6 @@ function buildRoomEnvironment() {
 	const floorMat = new THREE.MeshStandardMaterial({ color: 0x9aa7ad, roughness: 0.86, metalness: 0.02 });
 	const wallMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.58 + hue * 0.03, 0.08, 0.60), roughness: 0.82, metalness: 0.04 });
 	const doorMat = new THREE.MeshStandardMaterial({ color: 0x010203, emissive: 0x000000, emissiveIntensity: 0.0, roughness: 0.88, transparent: true, opacity: 0.035, depthWrite: false });
-	const mirrorFrameMat = new THREE.MeshStandardMaterial({ color: 0xd8dde0, emissive: 0x101820, emissiveIntensity: 0.0, roughness: 0.18, metalness: 0.92 });
 	const goalFrameMat = new THREE.MeshStandardMaterial({ color: 0x8ff7ff, emissive: 0x2bdcff, emissiveIntensity: 0.65, roughness: 0.5, metalness: 0.04 });
 	const goalHoleMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
 	const depositedSoulMat = new THREE.MeshStandardMaterial({ color: 0x8ff7ff, emissive: 0x36d8ff, emissiveIntensity: 0.95, roughness: 0.42, metalness: 0.0 });
