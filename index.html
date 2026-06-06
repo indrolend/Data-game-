@@ -2293,10 +2293,8 @@ function particlesRuntimeEnabled() {
 	return !!graphicsSettings.particles;
 }
 
-const ENABLE_PORTAL_MIRROR_RUNTIME = false;
-
 function portalWindowRuntimeEnabled() {
-	return ENABLE_PORTAL_MIRROR_RUNTIME && !!graphicsSettings.portalWindow;
+	return false;
 }
 
 function applyPortalWindowMaterialContract(plane) {
@@ -3564,7 +3562,7 @@ const roomDepositPos = new THREE.Vector3(0, ROOM_GOAL_Y, ROOM_GRID_Z);
 const roomExitPos = new THREE.Vector3(0, HUMAN_VISUAL_FOOT_Y, ROOM_EXIT_Z);
 const shotPrevPos = new THREE.Vector3();
 const shotCurrPos = new THREE.Vector3();
-const shotClosestPos = new THREE.Vector3();
+const roomLocalPositionTmp = new THREE.Vector3();
 
 function seededRoomValue(offset = 0) {
 	const x = Math.sin((room.seed + offset) * 12.9898) * 43758.5453;
@@ -4227,7 +4225,7 @@ function updateRoomTopology(previousPlayerZ = player.pos.z, currentPlayerZ = pla
 	roomTopology.currentTileIndex = currentTile;
 	roomTopology.mode = room.doorOpen ? "advance" : "loop";
 	if (previousTile === currentTile) return false;
-	const localPlayerPos = getRoomLocalPosition(player.pos, shotClosestPos);
+	const localPlayerPos = getRoomLocalPosition(player.pos, roomLocalPositionTmp);
 	if (!isInsideDoorAperture(localPlayerPos, 0.04)) return false;
 	if (room.doorOpen && currentTile < previousTile) {
 		enterNextRoomThroughPortal("sourceToDestination");
@@ -7951,10 +7949,6 @@ function updateCrosshair() {
 	crosshairState.hasAimTarget = targetLock.target !== -1 || candidate !== -1;
 }
 
-
-function renderMirrorDoor() {
-	return;
-}
 
 function updateRuntimeDiagnostics(dt) {
 	graphicsFpsState.frames += 1;
